@@ -62,6 +62,37 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 				return outp, err
 			}
 			return nil, err
+		case "oauthTest":
+			outp, err := oAuth.GetAccessToken(configuration.Username, configuration.Password)
+			if outp != nil {
+				outp["is_valid"] = oAuth.TestToken()
+				outp["test_output"], outp["test_output_err"] = oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+			}
+			return outp, err
+		case "oauthQuery":
+			function, ok := req_data["function"]
+			if !ok {
+				return nil, errors.New("Parameter `function` is required")
+			}
+			data, ok := req_data["data"]
+			if !ok {
+				return nil, errors.New("Parameter `data` is required")
+			}
+			outp, err := oAuth.Query(function.(string), data.(map[string]interface{}))
+			return outp, err
+		case "oauthApiCall":
+			path, ok := req_data["path"]
+			if !ok {
+				return nil, errors.New("Parameter `path` is required")
+			}
+			method, ok := req_data["method"]
+			if !ok {
+				return nil, errors.New("Parameter `method` is required")
+			}
+			outp, err := oAuth.ApiCall(path.(string), method.(string), /*data=*/nil)
+			return outp, err
+		case "oauthDownloadUri":
+			return nil, nil
 		default:
 			return nil, errors.New("Invalid request type")
 	}
