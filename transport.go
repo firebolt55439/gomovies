@@ -66,8 +66,6 @@ func decodeMoviesRequest(ctx context.Context, r *http.Request) (interface{}, err
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		return nil, err
 	}
-	//ctx = httptransport.PopulateRequestContext(ctx, r)
-	//fmt.Println("Host", ctx.Value(httptransport.ContextKeyRequestHost))
 	return request, nil
 }
 

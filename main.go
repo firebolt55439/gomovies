@@ -7,6 +7,8 @@ import (
 	"os"
 	"fmt"
 	"encoding/json"
+	
+	"github.com/42minutes/go-trakt"
 
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -15,6 +17,9 @@ import (
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	httptransport "github.com/go-kit/kit/transport/http"
 )
+
+var logger log.Logger
+var traktClient *trakt.Client
 
 func main() {
 	/* Parse command-line args */
@@ -45,9 +50,15 @@ func main() {
 		refresh_token_url: configuration.RefreshTokenUrl,
 		api_url: configuration.ApiUrl,
 	}
+	traktClient = trakt.NewClientWith(
+		configuration.TraktBaseUrl,
+		"Trakt Golang Client",
+		configuration.TraktClientId,
+		trakt.TokenAuth{AccessToken: "ACCESS_TOKEN"},
+		nil,
+	)
 	
 	/* Initialize microservices */
-	var logger log.Logger
 	logger = log.NewLogfmtLogger(os.Stderr)
 	logger = log.With(logger, "listen", *listen, "caller", log.DefaultCaller)
 
@@ -88,7 +99,9 @@ func main() {
 		decodeCountRequest,
 		encodeResponse,
 	)
-
+	
+	http.HandleFunc("/", rootHandler)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	http.Handle("/movies", moviesHandler)
 	http.Handle("/count", countHandler)
 	http.Handle("/metrics", promhttp.Handler())

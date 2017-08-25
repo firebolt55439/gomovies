@@ -3,7 +3,11 @@ package main
 import (
 	"errors"
 	"context"
-	//"fmt"
+	"io/ioutil"
+	"net/http"
+	"fmt"
+	"time"
+	"strconv"
 	httptransport "github.com/go-kit/kit/transport/http"
 	//"strings"
 )
@@ -30,6 +34,11 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 	if !ok {
 		return nil, errors.New("Cannot handle request data")
 	}
+	lb_ip, ok := s["__lb_ip__"]
+	if !ok {
+		// Use this instance as the load balancer if none is specified
+		lb_ip = ctx.Value(httptransport.ContextKeyRequestHost).(string)
+	}
 	switch req_type {
 		case "imdbIdLookup":
 			// Takes {"id": "..."}
@@ -48,11 +57,6 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 			var ids []string
 			for _, id := range ids_interface {
 				ids = append(ids, id.(string))
-			}
-			lb_ip, ok := s["__lb_ip__"]
-			if !ok {
-				// Use this instance as the load balancer if none is specified
-				lb_ip = ctx.Value(httptransport.ContextKeyRequestHost).(string)
 			}
 			data, err := movieWorker.ResolveParallel(ids, lb_ip.(string))
 			if err == nil {
@@ -92,7 +96,31 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 			outp, err := oAuth.ApiCall(path.(string), method.(string), /*data=*/nil)
 			return outp, err
 		case "oauthDownloadUri":
-			return nil, nil
+			uri, ok := req_data["uri"]
+			if !ok {
+				return nil, errors.New("Parameter `uri` is required")
+			}
+			payload := make(map[string]interface{})
+			payload[configuration.DownloadUriOauthParam] = uri
+			outp, err := oAuth.Query(configuration.DownloadUriOauth, payload)
+			if err != nil {
+				return nil, err
+			}
+			return outp, err
+		case "getRecommendedMovies":
+			extension, ok := req_data["extended"].(string)
+			if !ok {
+				extension = "-1"
+			}
+			ext_int, _ := strconv.Atoi(extension)
+			data, err := movieWorker.GetRecommendedMovies(ext_int, lb_ip.(string))
+			if err == nil {
+				outp := map[string]interface{}{
+					"recommendations": data,
+				}
+				return outp, err
+			}
+			return nil, err
 		default:
 			return nil, errors.New("Invalid request type")
 	}
@@ -101,6 +129,33 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 
 func (movieService) Count(s string) int {
 	return len(s)
+}
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	defer func(begin time.Time) {
+		logger.Log(
+			"method", "root",
+			"took", time.Since(begin),
+		)
+	}(time.Now())
+	
+	if pusher, ok := w.(http.Pusher); ok {
+		if err := pusher.Push("/static/app.js?v=0.0.1", nil); err != nil {
+			logger.Log("Failed to push: %v", err)
+		}
+		if err := pusher.Push("/static/style.css", nil); err != nil {
+			logger.Log("Failed to push: %v", err)
+		}
+	}
+	
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	data, err := ioutil.ReadFile("static/index.html")
+	if err != nil {
+		panic(err)
+	}
+	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+	fmt.Fprint(w, string(data))
 }
 
 // ErrEmpty is returned when an input string is empty.

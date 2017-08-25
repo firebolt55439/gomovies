@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>GoMovies</title>
+		
+		<!-- CSS -->
+		<link rel="stylesheet" href="/static/style.css?v=0.0.1">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+		
+		<!-- JS -->
+		<script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+	</head>
+	<body style="padding-top: 50px;">
+		<nav class="navbar navbar-inverse navbar-fixed-top">
+		  <div class="container-fluid">
+			<div class="navbar-header">
+			  <a class="navbar-brand" href="#">GoMovies!</a>
+			</div>
+			<ul class="nav navbar-nav">
+			  <li class="active"><a href="#refresh"><span class="glyphicon glyphicon-home"></span></a></li>
+			  <li><a href="#reload"><span class="glyphicon glyphicon-refresh"></span></a></li>
+			  <li><a href="#view_watchlist"><span class="glyphicon glyphicon-th-list"></span></a></li>
+			</ul>
+			<form class="navbar-form navbar-right" id="search-form" method="GET">
+			  <div class="input-group search-btn" style="overflow: hidden;">
+				<input id="search-input" type="search" class="form-control" placeholder="Search">
+				<div class="input-group-btn">
+				  <button class="btn btn-default" type="submit">
+					<i class="glyphicon glyphicon-search"></i>
+				  </button>
+				</div>
+			  </div>
+			</form>
+		  </div>
+		</nav>
+		<div id="carousel_space"></div>
+		<ul id="grid"></ul>
+		<div id="empty-search" style="display: none; text-align: center;">
+			<br />
+			<h4 style="color: white;">No results found.</h4>
+		</div>
+		<div class="loader" style="display: none;">Loading...</div>
+	</body>
+	<script src="http://vjs.zencdn.net/6.2.0/video.js"></script>
+	<script src="/static/app.js?v=0.0.1"></script>
+</html>

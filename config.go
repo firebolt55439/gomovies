@@ -9,6 +9,13 @@ type Configuration struct {
 	RefreshTokenUrl string `json:"refresh_token_url"`
 	ApiUrl string `json:"api_url"`
 	RestApiUrl string `json:"rest_api_url"`
+	
+	TraktBaseUrl string `json:"trakt_base_url"`
+	TraktClientId string `json:"trakt_client_id"`
+	TraktClientSecret string `json:"trakt_client_secret"`
+	
+	DownloadUriOauth string `json:"download_uri_oauth"`
+	DownloadUriOauthParam string `json:"download_uri_oauth_param"`
 }
 
 var configuration = Configuration{}

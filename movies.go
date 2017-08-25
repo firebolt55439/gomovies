@@ -16,11 +16,16 @@ import (
 	"math"
 	
 	"github.com/coocood/freecache"
+	"github.com/42minutes/go-trakt"
 )
 
 type MovieData interface {
+	/* IMDB metadata resolution */
 	ScrapeImdb(id string) (map[string]interface{}, error)
 	ResolveParallel(ids []string, load_balancer_addr string) ([]map[string]interface{}, error)
+	
+	/* Trakt.tv and taste.io integration */
+	GetRecommendedMovies(extension int, load_balancer_addr string) ([]map[string]interface{}, error)
 }
 
 type movieData struct{}
@@ -86,6 +91,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
     }
 	
 	// Download IMDB url
+	parsed["imdb_code"] = id
 	imdb_url := fmt.Sprintf("http://www.imdb.com/title/%s/", id)
 	resp, _ := netClient.Get(imdb_url)
 	bytes, _ := ioutil.ReadAll(resp.Body)
@@ -106,7 +112,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	}
 	poster = getAfter(getAfter(poster, "img"), "src=\"")
 	poster = getBefore(poster, "\"")
-	parsed["poster"] = poster
+	parsed["cover_image"] = poster
 	
 	// Year
 	year := getAfter(body, "<span id=\"titleYear\">")
@@ -177,7 +183,6 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     // Resolve ID's in parallel via the load-balancer
     for _, imdb_id := range ids {
     	go func(imdb_id string) {
-    		//ret = make(map[string]interface{})
     		to_send := new(bytes.Buffer)
     		json.NewEncoder(to_send).Encode(map[string]interface{}{
     			"q": map[string]interface{}{
@@ -201,6 +206,8 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     		}
     		var got moviesResponse
     		json.NewDecoder(res.Body).Decode(&got)
+    		got.V["sources"] = []string{}
+    		got.V["title"] = fmt.Sprintf("%s (%.0f)", got.V["title"], got.V["year"])
     		parsed <- got.V
     	} (imdb_id)
     }
@@ -229,6 +236,130 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     })
     return ret, err
 }
+
+const (
+	MoviePopularUrl = "/movies/popular"
+	MovieWatchedUrl = "/movies/watched/yearly"
+	MovieTrendingUrl = "/movies/trending"
+)
+
+func newTraktRequest(uri string) (*trakt.Request, error) {
+	req, err := traktClient.NewRequest(uri)
+	if err != nil {
+		return nil, err
+	}
+	delete(req.Query, "extended")
+	return req, err
+}
+
+func traktPaginateUrl(url string, page, limit int) string {
+	return (url + "?page=" + strconv.Itoa(page) + "&limit=" + strconv.Itoa(limit))
+}
+
+func mapToField(obj []map[string]interface{}, field string) ([]map[string]interface{}) {
+	for i, on := range obj {
+		//fmt.Println(on[field])
+		have, ok := on[field].(map[string]interface{})
+		if ok {
+			obj[i] = have
+		}
+	}
+	return obj
+}
+
+func deDup(input []string) []string {
+	u := make([]string, 0, len(input))
+	m := make(map[string]bool)
+
+	for _, val := range input {
+		if _, ok := m[val]; !ok {
+			m[val] = true
+			u = append(u, val)
+		}
+	}
+
+	return u
+}
+
+func (movieData) GetRecommendedMovies(extension int, load_balancer_addr string) (ret []map[string]interface{}, err error) {
+	var output []map[string]interface{}
+	var tmp []map[string]interface{}
+	if extension < 0 {
+		extension = 0
+	}
+	
+	/* Get top Trakt.tv movies */
+	req, err := newTraktRequest(traktPaginateUrl(MoviePopularUrl, 1 + extension, 25))
+	req.Get(&tmp)
+	output = append(output, tmp...)
+	
+	req, err = newTraktRequest(traktPaginateUrl(MovieWatchedUrl, 1 + extension, 25))
+	tmp = nil
+	req.Get(&tmp)
+	output = append(output, mapToField(tmp, "movie")...)
+	
+	req, err = newTraktRequest(traktPaginateUrl(MovieTrendingUrl, 1 + extension, 25))
+	tmp = nil
+	req.Get(&tmp)
+	output = append(output, mapToField(tmp, "movie")...)
+	
+	/* Map output to IMDB id's */
+	var ids []string
+	for _, v := range output {
+		id, ok := (v["ids"].(map[string]interface{}))["imdb"].(string)
+		if ok {
+			ids = append(ids, id)
+		}
+	}
+	ids = deDup(ids)
+	output = nil
+	fmt.Println(ids)
+	
+	// TODO: Get Taste.io recommendations as well
+	
+	/* Resolve ID's in parallel */
+	to_send := new(bytes.Buffer)
+	json.NewEncoder(to_send).Encode(map[string]interface{}{
+		"q": map[string]interface{}{
+			"type": "resolveParallel",
+			"data": map[string]interface{}{
+				"ids": ids,
+			},
+		},
+	})
+	posting_url := fmt.Sprintf("http://%s/movies", load_balancer_addr)
+	//fmt.Println(to_send)
+	res, err := netClient.Post(
+		posting_url,
+		"application/json; charset=utf-8",
+		to_send,
+	)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil, err
+	}
+	var got moviesResponse
+	json.NewDecoder(res.Body).Decode(&got)
+	interface_arr := got.V["resolved"].([]interface{})
+	
+	/* Convert output to desired format */
+	for _, elem := range interface_arr {
+		output = append(output, elem.(map[string]interface{}))
+	}
+	
+	/* Return output */
+	return output, err
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
