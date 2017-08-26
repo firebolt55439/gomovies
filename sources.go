@@ -97,7 +97,7 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 		target_url := fmt.Sprintf("%s?%s", configuration.SourceApiBaseUrl, searchParams.Encode())
 		var results []map[string]interface{}
 		
-		for {
+		for attempt := 1; attempt <= 5; attempt += 1{
 			/* Generate and execute request */
 			res, err := netClient.Get(
 				target_url,
@@ -116,7 +116,7 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			
 			if error_code, ok := got["error_code"].(int); ok {
 				fmt.Println(fmt.Sprintf("Retrying (error code %d)", error_code))
-				time.Sleep(1 * time.Second)
+				time.Sleep(time.Duration(attempt) * time.Second)
 				continue
 			}
 			
@@ -130,6 +130,10 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			}
 			
 			break
+		}
+		
+		if len(results) == 0 {
+			return nil, errors.New("Could not complete search request!")
 		}
 		
 		/* Convert response to desired format */
