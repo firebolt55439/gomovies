@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"sort"
 	"math"
+	"runtime"
 	
 	"github.com/coocood/freecache"
 	"github.com/42minutes/go-trakt"
@@ -26,6 +27,9 @@ type MovieData interface {
 	
 	/* Trakt.tv and taste.io integration */
 	GetRecommendedMovies(extension int, load_balancer_addr string) ([]map[string]interface{}, error)
+	
+	/* Media sources */
+	SearchForItem(opts map[string]interface{}, load_balancer_addr string) ([]map[string]interface{}, error)
 }
 
 type movieData struct{}
@@ -61,18 +65,61 @@ func GetBytes(key interface{}) ([]byte, error) {
     return buf.Bytes(), nil
 }
 
+func identifyPanic() string {
+	var name, file string
+	var line int
+	var pc [16]uintptr
+	
+	n := runtime.Callers(3, pc[:])
+	for _, pc := range pc[:n] {
+		fn := runtime.FuncForPC(pc)
+		if fn == nil {
+			continue
+		}
+		file, line = fn.FileLine(pc)
+		name = fn.Name()
+		if !strings.HasPrefix(name, "runtime.") {
+			break
+		}
+	}
+	
+	switch {
+	case name != "":
+		return fmt.Sprintf("%v:%v", name, line)
+	case file != "":
+		return fmt.Sprintf("%v:%v", file, line)
+	}
+	
+	return fmt.Sprintf("pc:%x", pc)
+}
+
 /* Interface functions */
-const IMDB_KEY_ID string = "imdbKeyId-";
+const (
+	IMDB_KEY_ID = "imdbKeyId-"
+)
 
 var cache *freecache.Cache = freecache.NewCache(10 * 1024 * 1024)
 var netClient = &http.Client{
-	Timeout: time.Second * 3,
+	Timeout: time.Second * 10,
+}
+
+type ItemSource struct {
+	Quality string `json:"quality"` // 3D, 720p, etc.
+	Size string `json:"size"` // humanized size string
+	Filename string `json:"filename"` // name of file
+	Url string `json:"url"` // file URL
+	SourceCount int `json:"sources"` // file source count
+	ClientCount int `json:"clients"` // file client count
+	TV struct {
+		Season int `json:"season"` // season #
+		Episode int `json:"episode"` // episode #
+	} `json:"tv"` // TV information, if applicable
 }
 
 func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error) {
 	defer func() {
         if r := recover(); r != nil {
-            err = errors.New(fmt.Sprintf("was panicking, recovered value: %v", r))
+            err = errors.New(fmt.Sprintf("ScrapeImdb was panicking, recovered value: %v (%s)", r, identifyPanic()))
         }
     }()
     parsed = make(map[string]interface{})
@@ -125,7 +172,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	title = strings.Replace(title, "&nbsp;", "", -1)
 	title = strings.TrimSpace(title)
 	title = html.UnescapeString(title)
-	parsed["title"] = title
+	parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
 	
 	// MPAA Rating
 	mpaa_rating := getAfter(body, "meta itemprop=\"contentRating\"")
@@ -155,6 +202,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	// Summary
 	summary := getAfter(body, "class=\"summary_text\"")
 	summary = getBetween(summary, ">", "<")
+	//fmt.Println(summary)
 	summary = strings.TrimSpace(summary)
 	summary = html.UnescapeString(summary)
 	parsed["summary"] = summary
@@ -174,7 +222,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret []map[string]interface{}, err error) {
 	defer func() {
         if r := recover(); r != nil {
-            err = errors.New(fmt.Sprintf("was panicking, recovered value: %v", r))
+            err = errors.New(fmt.Sprintf("ResolveParallel was panicking, recovered value: %v (%s)", r, identifyPanic()))
         }
     }()
     err = nil
@@ -207,7 +255,6 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     		var got moviesResponse
     		json.NewDecoder(res.Body).Decode(&got)
     		got.V["sources"] = []string{}
-    		got.V["title"] = fmt.Sprintf("%s (%.0f)", got.V["title"], got.V["year"])
     		parsed <- got.V
     	} (imdb_id)
     }
@@ -229,7 +276,20 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     sort.Slice(ret[:], func(i, j int) bool {
     	// descending sort
     	x, y := ret[i], ret[j]
-    	a, b := x["imdb_rating"].(float64), y["imdb_rating"].(float64)
+    	if tmp, ok := x["unreleased"].(bool); ok && tmp {
+    		return false;
+    	}
+    	if tmp, ok := y["unreleased"].(bool); ok && tmp {
+    		return true;
+    	}
+    	a, ok := x["imdb_rating"].(float64)
+    	if !ok {
+    		return false;
+    	}
+    	b, ok := y["imdb_rating"].(float64)
+    	if !ok {
+    		return true;
+    	}
 		a *= countReducer(x["imdb_rating_count"].(float64))
 		b *= countReducer(y["imdb_rating_count"].(float64))
 		return (a > b)
@@ -241,6 +301,7 @@ const (
 	MoviePopularUrl = "/movies/popular"
 	MovieWatchedUrl = "/movies/watched/yearly"
 	MovieTrendingUrl = "/movies/trending"
+	MovieSearchTextUrl = "/search/movie"
 )
 
 func newTraktRequest(uri string) (*trakt.Request, error) {
@@ -258,7 +319,6 @@ func traktPaginateUrl(url string, page, limit int) string {
 
 func mapToField(obj []map[string]interface{}, field string) ([]map[string]interface{}) {
 	for i, on := range obj {
-		//fmt.Println(on[field])
 		have, ok := on[field].(map[string]interface{})
 		if ok {
 			obj[i] = have
@@ -270,15 +330,72 @@ func mapToField(obj []map[string]interface{}, field string) ([]map[string]interf
 func deDup(input []string) []string {
 	u := make([]string, 0, len(input))
 	m := make(map[string]bool)
-
 	for _, val := range input {
 		if _, ok := m[val]; !ok {
 			m[val] = true
 			u = append(u, val)
 		}
 	}
-
 	return u
+}
+
+func filterTraktIds(output []map[string]interface{}) ([]string) {
+	var ids []string
+	for _, v := range output {
+		id, ok := (v["ids"].(map[string]interface{}))["imdb"].(string)
+		if ok {
+			ids = append(ids, id)
+		}
+	}
+	ids = deDup(ids)
+	return ids
+}
+
+func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[string]interface{}, error) {
+	var output []map[string]interface{}
+	if len(ids) == 0 {
+		return nil, errors.New("No ID's to resolve")
+	}
+	
+	/* Generate the request */
+	to_send := new(bytes.Buffer)
+	json.NewEncoder(to_send).Encode(map[string]interface{}{
+		"q": map[string]interface{}{
+			"type": "resolveParallel",
+			"data": map[string]interface{}{
+				"ids": ids,
+			},
+		},
+	})
+	posting_url := fmt.Sprintf("http://%s/movies", load_balancer_addr)
+	//fmt.Println(to_send)
+	
+	/* Execute the request */
+	res, err := netClient.Post(
+		posting_url,
+		"application/json; charset=utf-8",
+		to_send,
+	)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil, err
+	}
+	
+	/* Parse the response */
+	var got moviesResponse
+	json.NewDecoder(res.Body).Decode(&got)
+	interface_arr, ok := got.V["resolved"].([]interface{})
+	if !ok {
+		return nil, errors.New("Resolution unsuccessful")
+	}
+	
+	/* Convert output to desired format */
+	for _, elem := range interface_arr {
+		output = append(output, elem.(map[string]interface{}))
+	}
+	
+	/* Return parsed response */
+	return output, nil
 }
 
 func (movieData) GetRecommendedMovies(extension int, load_balancer_addr string) (ret []map[string]interface{}, err error) {
@@ -304,55 +421,56 @@ func (movieData) GetRecommendedMovies(extension int, load_balancer_addr string) 
 	output = append(output, mapToField(tmp, "movie")...)
 	
 	/* Map output to IMDB id's */
-	var ids []string
-	for _, v := range output {
-		id, ok := (v["ids"].(map[string]interface{}))["imdb"].(string)
-		if ok {
-			ids = append(ids, id)
-		}
-	}
-	ids = deDup(ids)
+	ids := filterTraktIds(output)
 	output = nil
 	fmt.Println(ids)
 	
 	// TODO: Get Taste.io recommendations as well
 	
 	/* Resolve ID's in parallel */
-	to_send := new(bytes.Buffer)
-	json.NewEncoder(to_send).Encode(map[string]interface{}{
-		"q": map[string]interface{}{
-			"type": "resolveParallel",
-			"data": map[string]interface{}{
-				"ids": ids,
-			},
-		},
-	})
-	posting_url := fmt.Sprintf("http://%s/movies", load_balancer_addr)
-	//fmt.Println(to_send)
-	res, err := netClient.Post(
-		posting_url,
-		"application/json; charset=utf-8",
-		to_send,
-	)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return nil, err
-	}
-	var got moviesResponse
-	json.NewDecoder(res.Body).Decode(&got)
-	interface_arr := got.V["resolved"].([]interface{})
-	
-	/* Convert output to desired format */
-	for _, elem := range interface_arr {
-		output = append(output, elem.(map[string]interface{}))
-	}
+	output, err = executeParallelResolution(ids, load_balancer_addr)
 	
 	/* Return output */
 	return output, err
 }
 
+func searchTraktMovies(keyword string, item_type string) ([]map[string]interface{}, error) {
+	var tmp []map[string]interface{}
+	
+	/* Execute Trakt.tv search for keyword */
+	var base_url string
+	if item_type == "movie" {
+		base_url = MovieSearchTextUrl
+	} else {
+		return nil, errors.New("Unknown item type")
+	}
+	req, err := newTraktRequest(traktPaginateUrl(base_url, 1, 25) + "&query=" + keyword)
+	req.Get(&tmp)
+	//fmt.Println(tmp)
+	return mapToField(tmp, "movie"), err
+}
 
-
+func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr string) ([]map[string]interface{}, error) {
+	var tmp, output []map[string]interface{}
+	var imdb_ids []string
+	// TODO: Store sources by ID
+	var err error
+	
+	/* Retrieve matches */
+	if imdb_id, ok := opts["id"].(string); ok {
+		panic(imdb_id)
+	} else if keyword, ok := opts["keyword"].(string); ok {
+		/* Search Trakt.tv */
+		tmp, err = searchTraktMovies(keyword, "movie")
+		imdb_ids = append(imdb_ids, filterTraktIds(tmp)...)
+	}
+	
+	/* Resolve matches */
+	output, err = executeParallelResolution(imdb_ids, load_balancer_addr)
+	
+	/* Return matches */
+	return output, err
+}
 
 
 

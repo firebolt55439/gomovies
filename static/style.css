@@ -196,7 +196,19 @@ body {
 	filter: blur(2px) brightness(40%) contrast(70%);
 }
 
-@media (max-width: 9000px) {
+@media (max-width: 100000px) {
+    #grid li {
+        width:14.285%;
+    }
+}
+
+@media (max-width: 1350px) {
+    #grid li {
+        width:16.66%;
+    }
+}
+
+@media (max-width: 1150px) {
     #grid li {
         width:20%;
     }
@@ -312,8 +324,8 @@ input::-webkit-input-placeholder {
   -webkit-animation-delay: -0.16s;
   animation-delay: -0.16s;
   position: fixed;
-  top: 50vh;
-  left: 50vh;
+  top: 45%;
+  left: 50%;
   /*transform: translate(-50%, -50%);*/
 }
 .loader:before,

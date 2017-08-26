@@ -87,6 +87,16 @@ function getRecommendedMovies(limit, extension) {
 	});
 }
 
+function searchForItem(keyword) {
+	return new Promise((resolve, reject) => {
+		apiReq("searchForItem", {
+			"keyword": keyword
+		}, function(data) {
+			resolve(data.results);
+		});
+	});
+}
+
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
@@ -204,6 +214,7 @@ $(function () {
 				while(true){
 					if(highlighted.length == data.length) break;
 					ind = Math.min(Math.round(Math.random() * data.length), data.length - 1);
+					if(data[ind].unreleased) continue;
 					if(highlighted.indexOf(ind) === -1){
 						highlighted.push(ind); // if not used, has already been watched
 					} else continue;
@@ -356,7 +367,7 @@ $(function () {
 		} else if(hash === "search"){
 			$('#carousel_space').empty();
 			setTimeout(() => {
-				populateGrid((limit) => search.searchMovies(params.key, limit), /*limit=*/12 * 1);
+				populateGrid((limit) => searchForItem(params.key), /*limit=*/12 * 1);
 			}, 150);
 		} else if(hash === "hide_recommendation"){
 			var rec_obj = JSON.parse(params["obj"]);
@@ -389,7 +400,9 @@ $(function () {
 		} else if(hash === "refresh"){
 			setTimeout(refreshHomepage, 10);
 		} else if(hash === "reload"){
-			setTimeout(electron.remote.getCurrentWindow().reload, 10);
+			setTimeout(() => {
+				location.reload(true);
+			}, 10);
 		} else if(hash === "view_watchlist"){
 			setTimeout(() => {
 				populateGrid(frontpage.getWatchlist, /*limit=*/12 * 1);

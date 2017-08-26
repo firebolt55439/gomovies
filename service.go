@@ -121,6 +121,17 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 				return outp, err
 			}
 			return nil, err
+		case "searchForItem":
+			// Can take {"id": <imdb_id>}
+			// Can take {"keyword": <keyword>}
+			data, err := movieWorker.SearchForItem(req_data, lb_ip.(string))
+			if err == nil {
+				outp := map[string]interface{}{
+					"results": data,
+				}
+				return outp, err
+			}
+			return nil, err
 		default:
 			return nil, errors.New("Invalid request type")
 	}
