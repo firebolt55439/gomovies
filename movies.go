@@ -247,7 +247,7 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     		}
     		var got moviesResponse
     		json.NewDecoder(res.Body).Decode(&got)
-    		got.V["sources"] = []string{}
+    		got.V["sources"] = []ItemSource{}
     		parsed <- got.V
     	} (imdb_id)
     }
@@ -415,6 +415,7 @@ func (movieData) GetRecommendedMovies(extension int, load_balancer_addr string) 
 	
 	/* Map output to IMDB id's */
 	ids := filterTraktIds(output)
+	ids = deDup(ids)
 	output = nil
 	fmt.Println(ids)
 	
@@ -493,7 +494,19 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	} else if keyword, ok := opts["keyword"].(string); ok {
 		/* Search Trakt.tv */
 		tmp, err = searchTraktMovies(keyword, "movie")
+		if err != nil {
+			return nil, err
+		}
 		imdb_ids = append(imdb_ids, filterTraktIds(tmp)...)
+		
+		/* Search sources */
+		source_results, err := SearchSourcesParallel(opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, elem := range source_results {
+			sources[elem.ImdbCode] = append(sources[elem.ImdbCode], elem)
+		}
 	}
 	
 	/* Cache sources */
@@ -512,7 +525,10 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	
 	/* Correlate resolved items and sources */
 	for idx := 0; idx < len(output); idx += 1 {
-		output[idx]["sources"], _ = sources[output[idx]["imdb_code"].(string)]
+		cur_imdb_code, _ := output[idx]["imdb_code"].(string)
+		if have, ok := sources[cur_imdb_code]; ok {
+			output[idx]["sources"] = have
+		}
 	}
 	
 	/* Return matches */
@@ -561,7 +577,7 @@ func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]in
 		return nil, errors.New(fmt.Sprintf("Expected 1 resolved, got %d", len(output)))
 	}
 	
-	/* Fill in sources and return */
+	/* Fill in sources and return requested item */
 	output[0]["sources"] = existing
 	return output[0], nil
 }

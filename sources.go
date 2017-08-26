@@ -93,31 +93,43 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			searchParams.Set("search_string", keyword)
 		}
 		
-		/* Generate and execute request */
+		/* Continue retrying request up to threshold */
 		target_url := fmt.Sprintf("%s?%s", configuration.SourceApiBaseUrl, searchParams.Encode())
-		res, err := netClient.Get(
-			target_url,
-		)
-		defer res.Body.Close()
-		if err != nil {
-			fmt.Println("Error:", err)
-			return nil, err
-		}
-		
-		/* Parse response */
-		var got map[string]interface{}
-		json.NewDecoder(res.Body).Decode(&got)
-		pretty_printed, _ := json.MarshalIndent(got, "", "  ")
-		fmt.Println(string(pretty_printed))
-		
-		var resultsArr []interface{}
 		var results []map[string]interface{}
-		for _, v := range got {
-			resultsArr = v.([]interface{}) // first value
+		
+		for {
+			/* Generate and execute request */
+			res, err := netClient.Get(
+				target_url,
+			)
+			defer res.Body.Close()
+			if err != nil {
+				fmt.Println("Error:", err)
+				return nil, err
+			}
+		
+			/* Parse and validate response */
+			var got map[string]interface{}
+			json.NewDecoder(res.Body).Decode(&got)
+			pretty_printed, _ := json.MarshalIndent(got, "", "  ")
+			fmt.Println(string(pretty_printed)[0:300])
+			
+			if error_code, ok := got["error_code"].(int); ok {
+				fmt.Println(fmt.Sprintf("Retrying (error code %d)", error_code))
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			
+			var resultsArr []interface{}
+			for _, v := range got {
+				resultsArr = v.([]interface{}) // first value
+				break
+			}
+			for _, elem := range resultsArr {
+				results = append(results, elem.(map[string]interface{}))
+			}
+			
 			break
-		}
-		for _, elem := range resultsArr {
-			results = append(results, elem.(map[string]interface{}))
 		}
 		
 		/* Convert response to desired format */
@@ -165,6 +177,7 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 					on["title"],
 					on["category"],
 				))
+				continue
 			}
 			
 			humanizedSize := bytesToSize(on["size"].(float64))
