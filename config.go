@@ -16,6 +16,10 @@ type Configuration struct {
 	
 	DownloadUriOauth string `json:"download_uri_oauth"`
 	DownloadUriOauthParam string `json:"download_uri_oauth_param"`
+	
+	SourceApiClientId string `json:"source_api_client_id"`
+	SourceApiSortKey string `json:"source_api_sort_key"`
+	SourceApiResultLimit int `json:"source_api_result_limit"`
 }
 
 var configuration = Configuration{}

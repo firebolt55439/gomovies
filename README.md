@@ -1,5 +1,5 @@
 # gomovies
-Golang REST API to retrieve movies information and recommendations
+Golang REST API and locally-hosted web interface to retrieve movie information and recommendations
 
 ### Installation
 ```
