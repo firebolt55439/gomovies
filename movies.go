@@ -30,6 +30,7 @@ type MovieData interface {
 	
 	/* Media sources */
 	SearchForItem(opts map[string]interface{}, load_balancer_addr string) ([]map[string]interface{}, error)
+	GetItem(id string, load_balancer_addr string) (map[string]interface{}, error)
 }
 
 type movieData struct{}
@@ -96,24 +97,12 @@ func identifyPanic() string {
 /* Interface functions */
 const (
 	IMDB_KEY_ID = "imdbKeyId-"
+	ITEM_KEY_ID = "itemKeyId-"
 )
 
-var cache *freecache.Cache = freecache.NewCache(10 * 1024 * 1024)
+var cache *freecache.Cache = freecache.NewCache(20 * 1024 * 1024)
 var netClient = &http.Client{
 	Timeout: time.Second * 10,
-}
-
-type ItemSource struct {
-	Quality string `json:"quality"` // 3D, 720p, etc.
-	Size string `json:"size"` // humanized size string
-	Filename string `json:"filename"` // name of file
-	Url string `json:"url"` // file URL
-	SourceCount int `json:"sources"` // file source count
-	ClientCount int `json:"clients"` // file client count
-	TV struct {
-		Season int `json:"season"` // season #
-		Episode int `json:"episode"` // episode #
-	} `json:"tv"` // TV information, if applicable
 }
 
 func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error) {
@@ -172,7 +161,10 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	title = strings.Replace(title, "&nbsp;", "", -1)
 	title = strings.TrimSpace(title)
 	title = html.UnescapeString(title)
-	parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
+	parsed["title"] = title
+	if parsed["year"].(int) > 0 {
+		parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
+	}
 	
 	// MPAA Rating
 	mpaa_rating := getAfter(body, "meta itemprop=\"contentRating\"")
@@ -213,7 +205,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	
 	// Cache result
 	parsed_bytes, ok := GetBytes(parsed)
-	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*never expires*/0)
+	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*1 hour=*/1 * 60 * 60)
 	
 	// Return gathered data
 	return parsed, err
@@ -247,6 +239,7 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     			"application/json; charset=utf-8",
     			to_send,
     		)
+    		defer res.Body.Close()
     		if ok != nil {
     			fmt.Println("Error:", ok)
     			parsed <- nil
@@ -347,7 +340,6 @@ func filterTraktIds(output []map[string]interface{}) ([]string) {
 			ids = append(ids, id)
 		}
 	}
-	ids = deDup(ids)
 	return ids
 }
 
@@ -376,6 +368,7 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 		"application/json; charset=utf-8",
 		to_send,
 	)
+	defer res.Body.Close()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return nil, err
@@ -450,30 +443,128 @@ func searchTraktMovies(keyword string, item_type string) ([]map[string]interface
 	return mapToField(tmp, "movie"), err
 }
 
+func cacheSources(sources map[string][]ItemSource) {
+	for imdb_id, sourceArr := range sources {
+		/* Retrieve existing cached values, if applicable */
+		var existing []ItemSource
+		cached, ok := cache.Get([]byte(ITEM_KEY_ID + imdb_id))
+		if ok == nil && cached != nil {
+			buf := bytes.NewBuffer(cached)
+			dec := gob.NewDecoder(buf)
+			v := dec.Decode(&existing)
+			if v != nil {
+				panic(v)
+			}
+		}
+		
+		/* Gracefully merge current and cached item sources */
+		merged := make(map[string]ItemSource)
+		for _, elem := range sourceArr {
+			merged[elem.Url] = elem
+		}
+		for _, elem := range existing {
+			if _, ok := merged[elem.Url]; ok {
+				continue;
+			}
+			merged[elem.Url] = elem
+		}
+		
+		sourceArr = nil
+		for _, v := range merged {
+			sourceArr = append(sourceArr, v)
+		}
+		merged = nil
+		
+		/* Save merged array to cache */
+		source_bytes, ok := GetBytes(sourceArr)
+		cache.Set([]byte(ITEM_KEY_ID + imdb_id), source_bytes, /*1 hour=*/1 * 60 * 60)
+	}
+}
+
 func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr string) ([]map[string]interface{}, error) {
 	var tmp, output []map[string]interface{}
 	var imdb_ids []string
-	// TODO: Store sources by ID
+	sources := make(map[string][]ItemSource)
 	var err error
 	
 	/* Retrieve matches */
 	if imdb_id, ok := opts["id"].(string); ok {
-		panic(imdb_id)
+		sources[imdb_id], err = SearchSourcesParallel(opts)
 	} else if keyword, ok := opts["keyword"].(string); ok {
 		/* Search Trakt.tv */
 		tmp, err = searchTraktMovies(keyword, "movie")
 		imdb_ids = append(imdb_ids, filterTraktIds(tmp)...)
 	}
 	
+	/* Cache sources */
+	cacheSources(sources)
+	
+	/* Add ID's from sources */
+	for _, sourceItems := range sources {
+		for _, item := range sourceItems {
+			imdb_ids = append(imdb_ids, item.ImdbCode)
+		}
+	}
+	
 	/* Resolve matches */
+	imdb_ids = deDup(imdb_ids)
 	output, err = executeParallelResolution(imdb_ids, load_balancer_addr)
+	
+	/* Correlate resolved items and sources */
+	for idx := 0; idx < len(output); idx += 1 {
+		output[idx]["sources"], _ = sources[output[idx]["imdb_code"].(string)]
+	}
 	
 	/* Return matches */
 	return output, err
 }
 
-
-
+func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]interface{}, error) {
+	// Look up by ID, fill in sources from cache, return
+	// If not cached, silently call SearchForItem and return item of specified ID
+	var existing []ItemSource
+	item_key := []byte(ITEM_KEY_ID + id)
+	
+	/* Check if cached */
+	cached, ok := cache.Get(item_key)
+	if ok != nil || cached == nil {
+		/* If not cached, search for sources and return the item and its sources */
+		outp, err := md.SearchForItem(map[string]interface{}{
+			"id": id,
+		}, load_balancer_addr)
+		if err != nil {
+			return nil, err
+		}
+		
+		for _, elem := range outp {
+			if elem["imdb_code"].(string) == id {
+				return elem, nil
+			}
+		}
+		return nil, errors.New("Item not in list returned from SearchForItem")
+	}
+	
+	/* If cached, parse cache */
+	buf := bytes.NewBuffer(cached)
+	dec := gob.NewDecoder(buf)
+	v := dec.Decode(&existing)
+	if v != nil {
+		panic(v)
+	}
+	
+	/* Resolve item */
+	output, err := executeParallelResolution([]string{id}, load_balancer_addr)
+	if err != nil {
+		return nil, err
+	}
+	if len(output) != 1 {
+		return nil, errors.New(fmt.Sprintf("Expected 1 resolved, got %d", len(output)))
+	}
+	
+	/* Fill in sources and return */
+	output[0]["sources"] = existing
+	return output[0], nil
+}
 
 
 

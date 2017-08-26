@@ -97,6 +97,16 @@ function searchForItem(keyword) {
 	});
 }
 
+function lookupItem(imdb_id) {
+	return new Promise((resolve, reject) => {
+		apiReq("itemLookup", {
+			"id": imdb_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
@@ -313,14 +323,15 @@ $(function () {
 		// Handle event.
 		if(hash === "watch"){
 			var imdb_id = params.id;
-			var on = metadata.getItemById(imdb_id);
-			currentItem = on;
+			$('.loader').show();
+			lookupItem(imdb_id).then((on) => {
+				console.log(on);
+				$('.loader').hide();
+				currentItem = on;
 			
-			// Fill in playback and/or history information for current item.
-			currentItem.playback_progress = history.getPlaybackProgressForMovie(imdb_id);
-			
-			// Define quality selection window-opening function.
-			var promptUserForQualityChoice = function() {
+				// Fill in playback and/or history information for current item.
+				currentItem.playback_progress = undefined/*history.getPlaybackProgressForMovie(imdb_id)*/;
+				
 				// Ask user which quality to play in via a modal window.
 				child = new electron.remote.BrowserWindow({
 					parent: electron.remote.getCurrentWindow(),
@@ -328,7 +339,7 @@ $(function () {
 					show: false,
 					resizeable: false
 				})
-			
+		
 				child.loadURL(url.format({
 					pathname: path.join(__dirname, 'quality.html'),
 					protocol: 'file:',
@@ -350,20 +361,7 @@ $(function () {
 					// Free window object
 					child = null;
 				})
-			};
-			
-			// Check if it's a recommendation, and if so, retrieve sources for it.
-			// After source retrieval (as needed) is done, open the modal window
-			// and prompt user for quality choice.
-			if(on.sources.length == 0){
-				$('.loader').show();
-				search.findSourcesByItem(on).then((sources) => {
-					console.log("Filled in:", sources);
-					currentItem.sources = sources;
-					$('.loader').hide();
-					promptUserForQualityChoice();
-				});
-			} else promptUserForQualityChoice();
+			});
 		} else if(hash === "search"){
 			$('#carousel_space').empty();
 			setTimeout(() => {

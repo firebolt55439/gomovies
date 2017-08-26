@@ -132,6 +132,13 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 				return outp, err
 			}
 			return nil, err
+		case "itemLookup":
+			id, ok := req_data["id"]
+			if !ok {
+				return nil, errors.New("Parameter `id` is required")
+			}
+			outp, err := movieWorker.GetItem(id.(string), lb_ip.(string))
+			return outp, err
 		default:
 			return nil, errors.New("Invalid request type")
 	}
