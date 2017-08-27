@@ -1,20 +1,30 @@
 // Monkey-patch jQuery.
 (function() {
-var re = /([^&=]+)=?([^&]*)/g;
-var decodeRE = /\+/g;  // Regex for replacing addition symbol with a space
-var decode = function (str) {return decodeURIComponent( str.replace(decodeRE, " ") );};
-$.parseParams = function(query) {
-    var params = {}, e;
-    while ( e = re.exec(query) ) { 
-        var k = decode( e[1] ), v = decode( e[2] );
-        if (k.substring(k.length - 2) === '[]') {
-            k = k.substring(0, k.length - 2);
-            (params[k] || (params[k] = [])).push(v);
-        }
-        else params[k] = v;
-    }
-    return params;
-};
+	var re = /([^&=]+)=?([^&]*)/g;
+	var decodeRE = /\+/g;  // Regex for replacing addition symbol with a space
+	var decode = function (str) {return decodeURIComponent( str.replace(decodeRE, " ") );};
+	$.parseParams = function(query) {
+		var params = {}, e;
+		while ( e = re.exec(query) ) { 
+			var k = decode( e[1] ), v = decode( e[2] );
+			if (k.substring(k.length - 2) === '[]') {
+				k = k.substring(0, k.length - 2);
+				(params[k] || (params[k] = [])).push(v);
+			}
+			else params[k] = v;
+		}
+		return params;
+	};
+    
+    // from https://codepen.io/filippoq/pen/QwogWz/
+    $.fn.bmdIframe = function() {
+        // se si chiude la modale resettiamo i dati dell'iframe per impedire ad un video di continuare a riprodursi anche quando la modale è chiusa
+        this.on('hidden.bs.modal', function(){
+          $(this).find('iframe').html("").attr("src", "");
+        });
+      
+        return this;
+    };
 })();
 
 // Define API request function
@@ -307,6 +317,34 @@ $(function () {
 			}
 		}
 	});
+	
+	// Set up iframe.
+	$('#frameModal').bmdIframe();
+	var openPage = function(opts) {
+		opts = $.extend({
+			"path": "about:blank",
+			"allowFullScreen": false,
+			"height": 640,
+			"width": 360
+		}, opts);
+		
+		var iframe = $('#frameModal').find("iframe");
+		iframe.attr("src", opts.path);
+		/*
+		iframe.css({
+			"height": opts.height,
+			"width": opts.width
+		});
+		*/
+		
+		if(opts.allowFullScreen) iframe.attr("allowfullscreen", "");
+		
+		$('#frameModal').modal('show');
+	};
+	var sendFrameMessage = function(obj) {
+		var contentWin = $('#frameModal').find("iframe").get(0).contentWindow;
+		contentWin.postMessage(JSON.stringify(currentItem), "*");
+	}
 
 	// Intercept hashchange event and display player.
 	$(window).on('hashchange', function() {
@@ -328,10 +366,18 @@ $(function () {
 				console.log(on);
 				$('.loader').hide();
 				currentItem = on;
-			
+				
 				// Fill in playback and/or history information for current item.
 				currentItem.playback_progress = undefined/*history.getPlaybackProgressForMovie(imdb_id)*/;
 				
+				// Initialize frame.
+				openPage({
+					"path": "/static/quality.html?v=0.0.4",
+					"allowFullScreen": false,
+					"height": 16 * 60,
+					"width": 9 * 60
+				});
+				/*
 				// Ask user which quality to play in via a modal window.
 				child = new electron.remote.BrowserWindow({
 					parent: electron.remote.getCurrentWindow(),
@@ -361,6 +407,7 @@ $(function () {
 					// Free window object
 					child = null;
 				})
+				*/
 			});
 		} else if(hash === "search"){
 			$('#carousel_space').empty();
@@ -410,6 +457,16 @@ $(function () {
 		// Mark done by resetting window.location.hash
 		window.history.pushState(null, null, '#');
 	});
+	
+	// Listen for events from modals.
+	window.addEventListener("message", (e) => {
+		var parsed = JSON.parse(e.data);
+		var type = parsed.type;
+		var data = parsed.data;
+		if(type === "quality_window_open"){
+			sendFrameMessage(currentItem);
+		}
+	}, false);
 	
 	// Listen for quality selection.
 	/*

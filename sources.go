@@ -111,11 +111,11 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			/* Parse and validate response */
 			var got map[string]interface{}
 			json.NewDecoder(res.Body).Decode(&got)
-			pretty_printed, _ := json.MarshalIndent(got, "", "  ")
-			fmt.Println(string(pretty_printed)[0:300])
+			//pretty_printed, _ := json.MarshalIndent(got, "", "  ")
+			//fmt.Println(string(pretty_printed)[0:300]) // don't enable - slice bounds error
 			
-			if error_code, ok := got["error_code"].(int); ok {
-				fmt.Println(fmt.Sprintf("Retrying (error code %d)", error_code))
+			if error, ok := got["error"]; ok {
+				fmt.Println(fmt.Sprintf("Retrying (error %s)", error))
 				time.Sleep(time.Duration(attempt) * time.Second)
 				continue
 			}

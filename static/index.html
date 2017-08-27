@@ -6,7 +6,7 @@
 		<title>GoMovies</title>
 		
 		<!-- CSS -->
-		<link rel="stylesheet" href="/static/style.css?v=0.0.5">
+		<link rel="stylesheet" href="/static/style.css?v=0.1.8">
 		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
 		
 		<!-- JS -->
@@ -14,6 +14,7 @@
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 	</head>
 	<body style="padding-top: 50px;">
+		<!-- navbar -->
 		<nav class="navbar navbar-inverse navbar-fixed-top">
 		  <div class="container-fluid">
 			<div class="navbar-header">
@@ -36,14 +37,44 @@
 			</form>
 		  </div>
 		</nav>
+		
+		<!-- grid and carousel -->
 		<div id="carousel_space"></div>
 		<ul id="grid"></ul>
+		
+		<!-- search -->
 		<div id="empty-search" style="display: none; text-align: center;">
 			<br />
 			<h4 style="color: white;">No results found.</h4>
 		</div>
+		
+		<!-- loader -->
 		<div class="loader" style="display: none;">Loading...</div>
+		
+		<!-- iframe modal -->
+		<div class="modal fade" id="frameModal" tabindex="-1" role="dialog" data-backdrop="false">
+			<div class="modal-dialog">
+				<div class="modal-content bmd-modalContent modal-lg">
+					<div class="modal-body" style="height: 500px;">
+						<!--
+						<div class="close-button">
+							<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+						</div>
+						<div class="embed-responsive embed-responsive-16by9">
+							<iframe class="embed-response-item" frameborder="0"></iframe>
+						</div>
+						-->
+						<iframe style="height: 100%; width: 100%;" frameborder="0"></iframe>
+					</div>
+				</div><!-- /.modal-content -->
+			</div><!-- /.modal-dialog -->
+		</div><!-- /.modal -->
+	<!--<button type="button" class="bmd-modalButton" data-toggle="modal" data-bmdSrc="https://player.vimeo.com/video/18539129" data-bmdWidth="500" data-bmdHeight="281" data-target="#myModal">Vimeo</button>
+            
+            <button type="button" class="bmd-modalButton" data-toggle="modal" data-bmdSrc="https://www.youtube.com/embed/cMNPPgB0_mU" data-bmdWidth="640" data-bmdHeight="480" data-target="#myModal"  data-bmdVideoFullscreen="true">Youtube</button>
+            
+	<button type="button" class="bmd-modalButton" data-toggle="modal" data-bmdSrc="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d91737.51273778046!2d12.566428499999994!3d44.06689465000003!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x132cc3a48fa6592b%3A0xc1f284db17f1449d!2sRimini+RN!5e0!3m2!1sit!2sit!4v1427492339750" data-bmdWidth="600" data-bmdHeight="450" data-target="#myModal">Google maps</button>-->
 	</body>
 	<script src="http://vjs.zencdn.net/6.2.0/video.js"></script>
-	<script src="/static/app.js?v=0.0.2"></script>
+	<script src="/static/app.js?v=0.1.6"></script>
 </html>

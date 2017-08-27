@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Item Details</title>
+		
+		<!-- CSS -->
+		<link rel="stylesheet" href="/static/style.css?v=0.0.1">
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+		
+		<!-- JS -->
+		<script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+	</head>
+	<body>
+		<div id="options_container">
+			<div class="container">
+				<div class="row">
+					<div class="col-sm-6 col-md-4" style="background-color:rgba(0,0,0,0);">
+						<img id="cover-img" src="" style="width: 250px; max-width: 100%;"></img>
+					</div>
+					<div class="col-sm-6 col-md-4" style="text-align: justify;">
+						<div style="text-align: center; margin-top: 5%;"><h3 id="video-title"></h3></div>
+						<p id="summary-text"></p>
+						<br />
+						<p>MPAA Rating: <b id="mpaa-rating"></b></p>
+						<br />
+						<div class="progress">
+							<div class="imdb-rating progress-bar progress-bar-warning" style="width: 60%; min-width: 10%; color: blue;">
+							</div>
+						</div>
+						from <span id="imdb-rating-count"></span> reviewers <br />
+					</div>
+				</div>
+			</div><br />
+			<div class="container tv-container hidden">
+				<div class="row">
+					<div class="col-sm-5">
+						<div class="form-group">
+							<label for="seasonsel">Season:</label>
+							<select class="form-control" id="seasonsel">
+							</select>
+						</div>
+					</div>
+					<div class="col-sm-5">
+						<div class="form-group">
+							<label for="episodesel">Episode:</label>
+							<select class="form-control" id="episodesel">
+							</select>
+						</div>
+					</div>
+					<div class="col-sm-2">
+						<br />
+						<button type="button" class="btn btn-primary" id="tv_search_btn">Search</button>
+					</div>
+				</div>
+			</div>
+			<h3 id="quality_header">Select Source:</h3>
+			<h4 id="none_available" style="display: none;">No sources available.</h4>
+			<ul id="options" style="margin-top:5px;"></ul>
+		</div>
+		<div class="loader" style="display: none;">Loading...</div>
+	</body>
+	<script src="/static/quality.js?v=0.0.3"></script>
+</html>

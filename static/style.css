@@ -474,3 +474,57 @@ input::-webkit-input-placeholder {
 div.tooltip-inner {
     max-width: 400px;
 }
+
+/* Frame modal styling */
+.bmd-modalButton {
+  display: block;
+  margin: 15px auto;
+  padding: 5px 15px;
+}
+
+.close-button {
+  margin-top: -10px;
+  overflow: hidden;
+}
+
+.bmd-modalContent {
+  box-shadow: none;
+  background-color: transparent;
+  border: 0;
+}
+  
+.bmd-modalContent .close {
+  font-size: 30px;
+  line-height: 30px;
+  padding: 7px 4px 7px 13px;
+  text-shadow: none;
+  opacity: .7;
+  color:#fff;
+}
+
+.bmd-modalContent .close span {
+  display: block;
+}
+
+.bmd-modalContent .close:hover,
+.bmd-modalContent .close:focus {
+  opacity: 1;
+  outline: none;
+}
+
+.bmd-modalContent iframe {
+  display: block;
+  margin: 0 auto;
+}
+
+.modal {
+	z-index: 30000 !important;
+}
+
+.modal-lg {
+	margin-top: 30px;
+	width: 800px;
+	height: 500px;
+	margin-left: -100px;
+	background-color: rgba(255, 255, 255, 0.2) !important;
+}
