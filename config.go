@@ -16,6 +16,7 @@ type Configuration struct {
 	
 	DownloadUriOauth string `json:"download_uri_oauth"`
 	DownloadUriOauthParam string `json:"download_uri_oauth_param"`
+	OauthDownloadingPath string `json:"oauth_downloading_path"`
 	
 	SourceApiBaseUrl string `json:"source_api_base_url"`
 	SourceApiClientId string `json:"source_api_client_id"`
@@ -24,6 +25,7 @@ type Configuration struct {
 	SourceApiHdTitle string `json:"source_api_hd_title"`
 	SourceApiSourceKey string `json:"source_api_source_key"`
 	SourceApiClientKey string `json:"source_api_client_key"`
+	SourceApiHostname string `json:"source_api_hostname"`
 }
 
 var configuration = Configuration{}

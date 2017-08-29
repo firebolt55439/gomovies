@@ -9,7 +9,7 @@ import (
 	"time"
 	"strconv"
 	httptransport "github.com/go-kit/kit/transport/http"
-	//"strings"
+	"strings"
 )
 
 // MovieService provides operations on strings.
@@ -95,16 +95,71 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 			}
 			outp, err := oAuth.ApiCall(path.(string), method.(string), /*data=*/nil)
 			return outp, err
-		case "oauthDownloadUri":
+		case "fetchUri":
 			uri, ok := req_data["uri"]
 			if !ok {
 				return nil, errors.New("Parameter `uri` is required")
 			}
-			payload := make(map[string]interface{})
-			payload[configuration.DownloadUriOauthParam] = uri
+			
+			/* Execute request */
+			payload := map[string]interface{}{
+				configuration.DownloadUriOauthParam: uri,
+			}
 			outp, err := oAuth.Query(configuration.DownloadUriOauth, payload)
 			if err != nil {
 				return nil, err
+			}
+			
+			/* If not enough space, clear main folder and try again */
+			if result, ok := outp["result"].(string); ok && strings.Contains(result, "not_enough_space") {
+				/* Retrieve main folder */
+				res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+				if err != nil {
+					return nil, err
+				}
+				
+				/* Get all ID's from main folder. */
+				var list []interface{}
+				list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
+				if !ok {
+					return nil, errors.New("Could not retrieve ID's from downloading path")
+				}
+				list = append(list, list_tmp...)
+				list_tmp, ok = res["folders"].([]interface{})
+				if !ok {
+					return nil, errors.New("Could not retrieve ID's from folders path")
+				}
+				list = append(list, list_tmp...)
+				
+				/* Clear out main folder */
+				fmt.Println("folders:", list)
+				for _, item := range list {
+					conv_item, ok := item.(map[string]interface{})
+					if !ok {
+						return nil, errors.New("Could not convert folder item")
+					}
+					current_id, ok := conv_item["id"].(float64)
+					
+					delete_type := "folder"
+					if _, ok = conv_item["progress_url"].(string); ok {
+						delete_type = strings.TrimSuffix(configuration.OauthDownloadingPath, "s")
+					}
+					
+					_, err := oAuth.Query("delete", map[string]interface{}{
+						"delete_arr": "[{\"type\": \"" + delete_type + "\", \"id\": \"" + fmt.Sprintf("%.0f", current_id) + "\"}]",
+					})
+					if err != nil {
+						return nil, err
+					}
+				}
+				
+				/* Retry request */
+				time.Sleep(1 * time.Second)
+				outp, err = oAuth.Query(configuration.DownloadUriOauth, payload)
+				if err != nil {
+					return nil, err
+				}
+				fmt.Println("retried:", outp)
 			}
 			return outp, err
 		case "getRecommendedMovies":
@@ -158,7 +213,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	}(time.Now())
 	
 	if pusher, ok := w.(http.Pusher); ok {
-		if err := pusher.Push("/static/app.js?v=0.0.1", nil); err != nil {
+		if err := pusher.Push("/static/app.js", nil); err != nil {
 			logger.Log("Failed to push: %v", err)
 		}
 		if err := pusher.Push("/static/style.css", nil); err != nil {

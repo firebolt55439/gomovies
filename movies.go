@@ -446,6 +446,10 @@ func searchTraktMovies(keyword string, item_type string) ([]map[string]interface
 
 func cacheSources(sources map[string][]ItemSource) {
 	for imdb_id, sourceArr := range sources {
+		if sourceArr == nil {
+			continue;
+		}
+		
 		/* Retrieve existing cached values, if applicable */
 		var existing []ItemSource
 		cached, ok := cache.Get([]byte(ITEM_KEY_ID + imdb_id))
@@ -521,7 +525,11 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	
 	/* Resolve matches */
 	imdb_ids = deDup(imdb_ids)
-	output, err = executeParallelResolution(imdb_ids, load_balancer_addr)
+	if len(imdb_ids) > 0 {
+		output, err = executeParallelResolution(imdb_ids, load_balancer_addr)
+	} else {
+		output = make([]map[string]interface{}, 0)
+	}
 	
 	/* Correlate resolved items and sources */
 	for idx := 0; idx < len(output); idx += 1 {
@@ -538,7 +546,7 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]interface{}, error) {
 	// Look up by ID, fill in sources from cache, return
 	// If not cached, silently call SearchForItem and return item of specified ID
-	var existing []ItemSource
+	existing := make([]ItemSource, 0)
 	item_key := []byte(ITEM_KEY_ID + id)
 	
 	/* Check if cached */
@@ -557,15 +565,14 @@ func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]in
 				return elem, nil
 			}
 		}
-		return nil, errors.New("Item not in list returned from SearchForItem")
-	}
-	
-	/* If cached, parse cache */
-	buf := bytes.NewBuffer(cached)
-	dec := gob.NewDecoder(buf)
-	v := dec.Decode(&existing)
-	if v != nil {
-		panic(v)
+	} else {
+		/* If cached, parse cache */
+		buf := bytes.NewBuffer(cached)
+		dec := gob.NewDecoder(buf)
+		v := dec.Decode(&existing)
+		if v != nil {
+			panic(v)
+		}
 	}
 	
 	/* Resolve item */

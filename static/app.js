@@ -117,11 +117,28 @@ function lookupItem(imdb_id) {
 	});
 }
 
+function fetchItem(uri) {
+	return new Promise((resolve, reject) => {
+		apiReq("fetchUri", {
+			"uri": uri
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
 let child, currentItem
 $(function () {
+	// Set up notification permissions
+	if(Notification.permission !== "denied" && Notification.permission !== "granted") {
+		Notification.requestPermission(function (permission) {
+			console.log("New notification permissions:", permission);
+		});
+	}
+	
 	// Function to retrieve HTML markup for a specified rating, scaled 0 to 100.
 	var retrieveRatingMarkup = function(rating_percentage){
 		var ret_div = $('<div class="star-ratings-css"></div>');
@@ -368,46 +385,13 @@ $(function () {
 				currentItem = on;
 				
 				// Fill in playback and/or history information for current item.
-				currentItem.playback_progress = undefined/*history.getPlaybackProgressForMovie(imdb_id)*/;
+				currentItem.playback_progress = undefined/*history.getPlaybackProgressForMovie(imdb_id)*/; // TODO
 				
 				// Initialize frame.
 				openPage({
-					"path": "/static/quality.html?v=0.0.4",
-					"allowFullScreen": false,
-					"height": 16 * 60,
-					"width": 9 * 60
+					"path": "/static/quality.html",
+					"allowFullScreen": false
 				});
-				/*
-				// Ask user which quality to play in via a modal window.
-				child = new electron.remote.BrowserWindow({
-					parent: electron.remote.getCurrentWindow(),
-					modal: true,
-					show: false,
-					resizeable: false
-				})
-		
-				child.loadURL(url.format({
-					pathname: path.join(__dirname, 'quality.html'),
-					protocol: 'file:',
-					slashes: true
-				}))
-
-				// Show window when page is ready
-				child.once('ready-to-show', function () {
-					//console.log("options:", on);
-					child.webContents.send('options', on);
-					child.show();
-				})
-
-				// Open the DevTools.
-				//child.webContents.openDevTools()
-
-				// Emitted when the window is closed.
-				child.on('closed', function () {
-					// Free window object
-					child = null;
-				})
-				*/
 			});
 		} else if(hash === "search"){
 			$('#carousel_space').empty();
@@ -463,8 +447,17 @@ $(function () {
 		var parsed = JSON.parse(e.data);
 		var type = parsed.type;
 		var data = parsed.data;
+		console.log("Received message from frame of type:", type, "with data:", data);
 		if(type === "quality_window_open"){
 			sendFrameMessage(currentItem);
+		} else if(type === "quality_select"){
+			$('#frameModal').modal('hide');
+			$('.loader').show();
+			fetchItem(data).then((data) => {
+				console.log("fetch result:", data);
+				$('.loader').hide();
+			});
+			// ...
 		}
 	}, false);
 	

@@ -21,6 +21,13 @@ import (
 var logger log.Logger
 var traktClient *trakt.Client
 
+func maxAgeHandler(seconds int, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", fmt.Sprintf("max-age=%d, public, must-revalidate, proxy-revalidate", seconds))
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	/* Parse command-line args */
 	var (
@@ -101,7 +108,7 @@ func main() {
 	)
 	
 	http.HandleFunc("/", rootHandler)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	http.Handle("/static/", http.StripPrefix("/static/", maxAgeHandler(0, http.FileServer(http.Dir("static")))))
 	http.Handle("/movies", moviesHandler)
 	http.Handle("/count", countHandler)
 	http.Handle("/metrics", promhttp.Handler())

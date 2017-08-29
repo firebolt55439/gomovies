@@ -24,6 +24,7 @@ type ItemSource struct {
 	Url string `json:"url"` // file URL
 	SourceCount int `json:"sources"` // file source count
 	ClientCount int `json:"clients"` // file client count
+	SourceHostname string `json:"source"` // source hostname
 	TV *ItemSourceTV `json:"tv,omitempty"` // TV information, if applicable
 }
 
@@ -72,6 +73,8 @@ func bytesToSize(bytes float64) (string) {
 
 var sources = []func(map[string]interface{}) ([]ItemSource, error){
 	func (opts map[string]interface{}) (ret []ItemSource, err error) {
+		ret = make([]ItemSource, 0)
+		
 		/* Generate search parameters */
 		token, err := getTokenIfNecessary()
 		if err != nil {
@@ -111,10 +114,14 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			/* Parse and validate response */
 			var got map[string]interface{}
 			json.NewDecoder(res.Body).Decode(&got)
-			//pretty_printed, _ := json.MarshalIndent(got, "", "  ")
-			//fmt.Println(string(pretty_printed)[0:300]) // don't enable - slice bounds error
+			pretty_printed, _ := json.MarshalIndent(got, "", "  ")
+			slice_until := int(math.Min(300, float64(len(pretty_printed))))
+			fmt.Println(string(pretty_printed)[0:slice_until])
 			
 			if error, ok := got["error"]; ok {
+				if strings.Contains(error.(string), "No results found") {
+					return ret, nil
+				}
 				fmt.Println(fmt.Sprintf("Retrying (error %s)", error))
 				time.Sleep(time.Duration(attempt) * time.Second)
 				continue
@@ -151,7 +158,10 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			if _, ok := on["episode_info"]; !ok {
 				continue
 			}
-			episode_info := on["episode_info"].(map[string]interface{})
+			episode_info, ok := on["episode_info"].(map[string]interface{})
+			if !ok {
+				continue
+			}
 			if _, ok := episode_info["imdb"]; !ok {
 				continue
 			}
@@ -176,12 +186,12 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 				}
 			}
 			if !have_quality {
+				quality = "SD"
 				fmt.Println(fmt.Sprintf(
 					"Warning: Could not detect quality for title %s and category %s",
 					on["title"],
 					on["category"],
 				))
-				continue
 			}
 			
 			humanizedSize := bytesToSize(on["size"].(float64))
@@ -194,6 +204,7 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 				Url: on["download"].(string),
 				SourceCount: int(on[configuration.SourceApiSourceKey].(float64)),
 				ClientCount: int(on[configuration.SourceApiClientKey].(float64)),
+				SourceHostname: configuration.SourceApiHostname,
 			})
 			
 			if _, ok := episode_info["seasonnum"]; ok {
