@@ -111,7 +111,8 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 			}
 			
 			/* If not enough space, clear main folder and try again */
-			if result, ok := outp["result"].(string); ok && strings.Contains(result, "not_enough_space") {
+			if result, ok := outp["result"].(string); ok &&
+			(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
 				/* Retrieve main folder */
 				res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
 				if err != nil {
@@ -162,6 +163,30 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[s
 				fmt.Println("retried:", outp)
 			}
 			return outp, err
+		case "getDownloads":
+			/* Retrieve main folder */
+			res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+			if err != nil {
+				return nil, err
+			}
+			
+			/* Get all folders in main folder. */
+			var list []interface{}
+			list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
+			if !ok {
+				return nil, errors.New("Could not retrieve ID's from downloading path")
+			}
+			list = append(list, list_tmp...)
+			list_tmp, ok = res["folders"].([]interface{})
+			if !ok {
+				return nil, errors.New("Could not retrieve ID's from folders path")
+			}
+			list = append(list, list_tmp...)
+			
+			/* Return in desired format. */
+			return map[string]interface{}{
+				"downloads": list,
+			}, err
 		case "getRecommendedMovies":
 			extension, ok := req_data["extended"].(string)
 			if !ok {

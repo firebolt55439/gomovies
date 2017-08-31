@@ -122,6 +122,9 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 				if strings.Contains(error.(string), "No results found") {
 					return ret, nil
 				}
+				if strings.Contains(error.(string), "Cant find imdb") {
+					return ret, nil
+				}
 				fmt.Println(fmt.Sprintf("Retrying (error %s)", error))
 				time.Sleep(time.Duration(attempt) * time.Second)
 				continue

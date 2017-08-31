@@ -528,3 +528,8 @@ div.tooltip-inner {
 	margin-left: -100px;
 	background-color: rgba(255, 255, 255, 0.2) !important;
 }
+
+/* Downloads styling */
+#downloads thead tr {
+	color: white;
+}

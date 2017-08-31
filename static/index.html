@@ -24,6 +24,7 @@
 			  <li class="active"><a href="#refresh"><span class="glyphicon glyphicon-home"></span></a></li>
 			  <li><a href="#reload"><span class="glyphicon glyphicon-refresh"></span></a></li>
 			  <li><a href="#view_watchlist"><span class="glyphicon glyphicon-th-list"></span></a></li>
+			  <li><a href="#view_downloads"><span class="glyphicon glyphicon-cloud-download"></span></a></li>
 			</ul>
 			<form class="navbar-form navbar-right" id="search-form" method="GET">
 			  <div class="input-group search-btn" style="overflow: hidden;">
@@ -41,6 +42,22 @@
 		<!-- grid and carousel -->
 		<div id="carousel_space"></div>
 		<ul id="grid"></ul>
+		
+		<!-- downloads -->
+		<div class="container">
+			<div class="table-responsive">
+				<table class="table table-hover" id="downloads" style="display: none;">
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Progress</th>
+						</tr>
+					</thead>
+					<tbody>
+					</tbody>
+				</table>
+			</div>
+		</div>
 		
 		<!-- search -->
 		<div id="empty-search" style="display: none; text-align: center;">

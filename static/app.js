@@ -127,6 +127,16 @@ function fetchItem(uri) {
 	});
 }
 
+function getDownloads() {
+	return new Promise((resolve, reject) => {
+		apiReq("getDownloads", {
+			//
+		}, function(data) {
+			resolve(data.downloads);
+		});
+	});
+}
+
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
@@ -221,6 +231,7 @@ $(function () {
 		$('.loader').show();
 		callback(limit).then((data) => {
 			console.log(data);
+			data = data.filter((x) => !x.unreleased);
 			
 			// Initialize the carousel.
 			if(!$('#highlights').length){
@@ -248,9 +259,17 @@ $(function () {
 				
 				// Add the image.
 				var ind = -1;
+				var checked = [];
 				while(true){
 					if(highlighted.length == data.length) break;
+					if(checked.length == data.length){
+						ind = -1;
+						break;
+					}
 					ind = Math.min(Math.round(Math.random() * data.length), data.length - 1);
+					if(checked.indexOf(ind) === -1){
+						checked.push(ind);
+					}
 					if(data[ind].unreleased) continue;
 					if(highlighted.indexOf(ind) === -1){
 						highlighted.push(ind); // if not used, has already been watched
@@ -274,7 +293,6 @@ $(function () {
 					"id": cur.imdb_code
 				});
 				cap.append($('<a href="' + new_hash + '" class="btn btn-success">Watch <span class="glyphicon glyphicon-film"></span></a><br /><br />'));
-				// TODO: Add star IMDB rating as well
 				img_div.append(cap);
 				$('.carousel-inner').append(img_div);
 			}
@@ -395,6 +413,7 @@ $(function () {
 			});
 		} else if(hash === "search"){
 			$('#carousel_space').empty();
+			$('#downloads').hide();
 			setTimeout(() => {
 				populateGrid((limit) => searchForItem(params.key), /*limit=*/12 * 1);
 			}, 150);
@@ -427,15 +446,99 @@ $(function () {
 				});
 			});
 		} else if(hash === "refresh"){
+			$('#downloads').hide();
 			setTimeout(refreshHomepage, 10);
 		} else if(hash === "reload"){
 			setTimeout(() => {
 				location.reload(true);
 			}, 10);
 		} else if(hash === "view_watchlist"){
+			$('#downloads').hide();
 			setTimeout(() => {
 				populateGrid(frontpage.getWatchlist, /*limit=*/12 * 1);
 			}, 150);
+		} else if(hash === "view_downloads"){
+			onHomepage = false;
+			$('#carousel_space').empty();
+			$('#grid').empty();
+			$('.loader').show();
+			var populateDownloads = (downloads) => {
+				var tbody = $('#downloads').find("tbody");
+				tbody.empty();
+				console.log("Downloads:", downloads);
+				var keep_running = false;
+				for(var item of downloads){
+					var tr = $('<tr></tr>');
+					var download_done = !item.progress;
+					var col_width = (download_done ? 175 : 75);
+					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
+					if(item.progress){
+						keep_running = true;
+						var prog = parseFloat(item.progress);
+						var desc = "" + prog.toString() + "%";
+						if(prog == 0.0){
+							prog = 100.0;
+							desc = "Collecting seeds...";
+						}
+						tr.append($('<td><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%;">' + desc + '</div></td>'));
+					} else {
+						var watch_hash = '#watch_download?' + $.param({
+							"folder_id": item.id
+						})
+						tr.append($('<td><a href="' + watch_hash + '" class="btn btn-success" role="button">Watch <span class="glyphicon glyphicon-film"></span></a></td>'));
+					}
+					if(item.warnings){
+						tr.addClass("warning");
+						tr.find(".progress-bar").addClass("progress-bar-warning");
+					} else if(item.progress){
+						tr.addClass("active");
+						tr.find(".progress-bar").addClass("progress-bar-info");
+					} else {
+						tr.addClass("success");
+					}
+					tbody.append(tr);
+				}
+				return keep_running;
+			};
+			var downloadInterval = null;
+			getDownloads().then((downloads) => {
+				var shouldRunAgain = populateDownloads(downloads);
+				downloadInterval = setInterval(function() {
+					getDownloads().then((downloads) => {
+						if(!downloads || !downloads.length){
+							clearInterval(downloadInterval);
+							return;
+						}
+						if(!populateDownloads(downloads) || !$('#downloads').is(':visible')){
+							clearInterval(downloadInterval);
+						}
+					});
+				}, 4000);
+				$('.loader').hide();
+				$('#downloads').show();
+			});
+		} else if(hash === "watch_download"){
+			var folder_id = params.folder_id;
+			apiReq("oauthApiCall", {
+				"path": "folder/" + folder_id,
+				"method": "GET"
+			}, function(data) {
+				console.log("retrieved folder:", data);
+				var files = data.files.filter((x) => x.play_video || parseFloat(x.video_progress) >= 0.00)
+				files.sort((a, b) => a.size < b.size); // descending order sort by size
+				console.log(files);
+				var file = files[0];
+				apiReq("oauthQuery", {
+					"function": "fetch_file_view",
+					"data": {
+						"folder_file_id": file.folder_file_id.toString()
+					}
+				}, function(file_data) {
+					console.log("fetch:", file_data);
+					var url = file_data.url;
+					// ...
+				});
+			});
 		}
 		
 		// Mark done by resetting window.location.hash
@@ -456,8 +559,24 @@ $(function () {
 			fetchItem(data).then((data) => {
 				console.log("fetch result:", data);
 				$('.loader').hide();
+				if(data.result !== true){
+					let notif = new Notification('Unable to Download', {
+						body: "Could not begin download.",
+						icon: currentItem.cover_image,
+						silent: true
+					});
+					notif.onclick = () => {};
+				} else {
+					let notif = new Notification(currentItem.title, {
+						body: "Download has begun.",
+						icon: currentItem.cover_image,
+						silent: true
+					});
+					notif.onclick = () => {};
+					history.pushState(null, null, '#view_downloads');
+					$(window).trigger('hashchange');
+				}
 			});
-			// ...
 		}
 	}, false);
 	
