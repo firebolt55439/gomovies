@@ -40,6 +40,7 @@ function apiReq(type, data, cb) {
 		dataType: "json",
 		url: "/movies",
 		success: function(data) {
+			console.log(type + " response:", data);
 			cb(data.v);
 		},
 		error: function(err) {
@@ -140,7 +141,7 @@ function getDownloads() {
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
-let child, currentItem
+let child, currentItem, lastDownloadedUrl
 $(function () {
 	// Set up notification permissions
 	if(Notification.permission !== "denied" && Notification.permission !== "granted") {
@@ -377,8 +378,9 @@ $(function () {
 		$('#frameModal').modal('show');
 	};
 	var sendFrameMessage = function(obj) {
+		var json_str = JSON.stringify(obj);
 		var contentWin = $('#frameModal').find("iframe").get(0).contentWindow;
-		contentWin.postMessage(JSON.stringify(currentItem), "*");
+		contentWin.postMessage(json_str, "*");
 	}
 
 	// Intercept hashchange event and display player.
@@ -536,7 +538,11 @@ $(function () {
 				}, function(file_data) {
 					console.log("fetch:", file_data);
 					var url = file_data.url;
-					// ...
+					lastDownloadedUrl = url;
+					openPage({
+						"path": "/static/watch.html",
+						"allowFullScreen": true
+					});
 				});
 			});
 		}
@@ -576,6 +582,10 @@ $(function () {
 					history.pushState(null, null, '#view_downloads');
 					$(window).trigger('hashchange');
 				}
+			});
+		} else if(type === "watch_window_open"){
+			sendFrameMessage({
+				url: lastDownloadedUrl
 			});
 		}
 	}, false);

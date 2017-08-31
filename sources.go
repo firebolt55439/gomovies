@@ -47,11 +47,11 @@ func getTokenIfNecessary() (string, error) {
 	res, err := netClient.Get(
 		target_url,
 	)
-	defer res.Body.Close()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return "", err
 	}
+	defer res.Body.Close()
 	
 	/* Parse the response */
 	var got SourceApiStorage
@@ -105,11 +105,11 @@ var sources = []func(map[string]interface{}) ([]ItemSource, error){
 			res, err := netClient.Get(
 				target_url,
 			)
-			defer res.Body.Close()
 			if err != nil {
 				fmt.Println("Error:", err)
 				return nil, err
 			}
+			defer res.Body.Close()
 		
 			/* Parse and validate response */
 			var got map[string]interface{}

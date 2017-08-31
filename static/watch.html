@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		
+		<!-- CSS -->
+		<!--<link rel="stylesheet" href="./style.css">-->
+		<link href="http://vjs.zencdn.net/6.2.0/video-js.css" rel="stylesheet">
+		<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+		
+		<!-- JS -->
+		<script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+		<style>
+		body, div, video {
+			margin:0; padding:0; box-sizing:border-box; 
+		}
+		body {
+			text-align: center;
+			background: #141E30;  /* fallback for old browsers */
+			background: -webkit-linear-gradient(to right, #243B55, #141E30);  /* Chrome 10-25, Safari 5.1-6 */
+			background: linear-gradient(to right, #243B55, #141E30); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+		}
+		</style>
+	</head>
+	<body>
+		<h3 id="loading-text" style="color: white; font-family: 'Oswald', sans-serif;">Buffering...</h3>
+		<div id="player">
+			<!-- video goes here -->
+		</div>
+	</body>
+	<script src="http://vjs.zencdn.net/6.2.0/video.js"></script>
+	<script src="/static/render_video.js"></script>
+</html>

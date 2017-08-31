@@ -102,7 +102,7 @@ const (
 
 var cache *freecache.Cache = freecache.NewCache(20 * 1024 * 1024)
 var netClient = &http.Client{
-	Timeout: time.Second * 10,
+	Timeout: 15 * time.Second,
 }
 
 func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error) {
@@ -129,7 +129,10 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	// Download IMDB url
 	parsed["imdb_code"] = id
 	imdb_url := fmt.Sprintf("http://www.imdb.com/title/%s/", id)
-	resp, _ := netClient.Get(imdb_url)
+	resp, ok := netClient.Get(imdb_url)
+	if ok != nil {
+		return nil, ok
+	}
 	bytes, _ := ioutil.ReadAll(resp.Body)
 	body := string(bytes)
 	//fmt.Println(body[0:200])
@@ -239,12 +242,12 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     			"application/json; charset=utf-8",
     			to_send,
     		)
-    		defer res.Body.Close()
     		if ok != nil {
     			fmt.Println("Error:", ok)
     			parsed <- nil
     			return
     		}
+    		defer res.Body.Close()
     		var got moviesResponse
     		json.NewDecoder(res.Body).Decode(&got)
     		got.V["sources"] = []ItemSource{}
@@ -368,11 +371,11 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 		"application/json; charset=utf-8",
 		to_send,
 	)
-	defer res.Body.Close()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return nil, err
 	}
+	defer res.Body.Close()
 	
 	/* Parse the response */
 	var got moviesResponse

@@ -20,7 +20,12 @@ type MovieService interface {
 
 type movieService struct{}
 
-func (movieService) Movies(s map[string]interface{}, ctx context.Context) (map[string]interface{}, error) {
+func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_return_value map[string]interface{}, err_return error) {
+	defer func() {
+        if r := recover(); r != nil {
+            err_return = errors.New(fmt.Sprintf("Service was panicking, recovered value: %v (%s)", r, identifyPanic()))
+        }
+    }()
 	//fmt.Println(s)
 	//fmt.Println("Host", ctx.Value(httptransport.ContextKeyRequestHost))
 	if len(s) == 0 {
