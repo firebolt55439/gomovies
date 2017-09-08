@@ -140,7 +140,9 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	
 	// Validity check
 	if strings.Index(body, "div class=\"title_wrapper\">") == -1 {
-		return nil, errors.New("No item matched for given IMDB id")
+		parsed["unreleased"] = true
+		//return nil, errors.New("No item matched for given IMDB id")
+		return parsed, err
 	}
 	
 	// Poster image
