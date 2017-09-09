@@ -13,6 +13,8 @@ type Configuration struct {
 	TraktBaseUrl string `json:"trakt_base_url"`
 	TraktClientId string `json:"trakt_client_id"`
 	TraktClientSecret string `json:"trakt_client_secret"`
+	TraktAccessToken string `json:"trakt_access_token"`
+	TraktRefreshToken string `json:"trakt_refresh_token"`
 	
 	DownloadUriOauth string `json:"download_uri_oauth"`
 	DownloadUriOauthParam string `json:"download_uri_oauth_param"`

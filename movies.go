@@ -27,6 +27,10 @@ type MovieData interface {
 	
 	/* Trakt.tv and taste.io integration */
 	GetRecommendedMovies(extension int, load_balancer_addr string) ([]map[string]interface{}, error)
+	GetWatchlist(load_balancer_addr string) ([]map[string]interface{}, error)
+	AddToWatchlist(item_type string, item_id string) (map[string]interface{}, error)
+	AddWatchHistory(item_type string, item_id string) (map[string]interface{}, error)
+	GetWatchHistory(load_balancer_addr string) ([]map[string]interface{}, error)
 	
 	/* Media sources */
 	SearchForItem(opts map[string]interface{}, load_balancer_addr string) ([]map[string]interface{}, error)
@@ -141,7 +145,6 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	// Validity check
 	if strings.Index(body, "div class=\"title_wrapper\">") == -1 {
 		parsed["unreleased"] = true
-		//return nil, errors.New("No item matched for given IMDB id")
 		return parsed, err
 	}
 	
@@ -239,19 +242,35 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     		})
     		posting_url := fmt.Sprintf("http://%s/movies", load_balancer_addr)
     		//fmt.Println(to_send)
-    		res, ok := netClient.Post(
-    			posting_url,
-    			"application/json; charset=utf-8",
-    			to_send,
-    		)
-    		if ok != nil {
-    			fmt.Println("Error:", ok)
+    		var res (*http.Response)
+    		var ok error
+    		ct := 0
+    		for ;; {
+    			ct += 1
+				res, ok = netClient.Post(
+					posting_url,
+					"application/json; charset=utf-8",
+					to_send,
+				)
+				if ok != nil {
+					fmt.Println("Error:", ok)
+					if ct > 5 {
+						parsed <- nil
+						return
+					}
+					fmt.Println("retrying - attempt #" + strconv.Itoa(ct))
+					time.Sleep(200 * time.Millisecond)
+					continue
+				}
+				defer res.Body.Close()
+				break
+    		}
+    		var got moviesResponse
+    		json.NewDecoder(res.Body).Decode(&got)
+    		if got.V == nil {
     			parsed <- nil
     			return
     		}
-    		defer res.Body.Close()
-    		var got moviesResponse
-    		json.NewDecoder(res.Body).Decode(&got)
     		got.V["sources"] = []ItemSource{}
     		parsed <- got.V
     	} (imdb_id)
@@ -300,6 +319,10 @@ const (
 	MovieWatchedUrl = "/movies/watched/yearly"
 	MovieTrendingUrl = "/movies/trending"
 	MovieSearchTextUrl = "/search/movie"
+	MovieWatchlistGetUrl = "/sync/watchlist/movie"
+	WatchlistAddUrl = "/sync/watchlist"
+	HistoryGetUrl = "/sync/history"
+	HistoryAddUrl = "/sync/history"
 )
 
 func newTraktRequest(uri string) (*trakt.Request, error) {
@@ -340,7 +363,11 @@ func deDup(input []string) []string {
 func filterTraktIds(output []map[string]interface{}) ([]string) {
 	var ids []string
 	for _, v := range output {
-		id, ok := (v["ids"].(map[string]interface{}))["imdb"].(string)
+		tmp, ok := (v["ids"].(map[string]interface{}))
+		if !ok {
+			continue
+		}
+		id, ok := tmp["imdb"].(string)
 		if ok {
 			ids = append(ids, id)
 		}
@@ -449,6 +476,22 @@ func searchTraktMovies(keyword string, item_type string) ([]map[string]interface
 	return mapToField(tmp, "movie"), err
 }
 
+func getTraktWatchlist(item_type string) ([]map[string]interface{}, error) {
+	var tmp []map[string]interface{}
+	
+	/* Execute Trakt.tv watchlist retrieval */
+	var base_url string
+	if item_type == "movie" {
+		base_url = MovieWatchlistGetUrl
+	} else {
+		return nil, errors.New("Unknown item type")
+	}
+	req, err := newTraktRequest(traktPaginateUrl(base_url, 1, 50000))
+	req.Get(&tmp)
+	
+	return mapToField(tmp, "movie"), err
+}
+
 func cacheSources(sources map[string][]ItemSource) {
 	for imdb_id, sourceArr := range sources {
 		if sourceArr == nil {
@@ -546,6 +589,98 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	
 	/* Return matches */
 	return output, err
+}
+
+func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface{}, error) {
+	var tmp, output []map[string]interface{}
+	var imdb_ids []string
+	var err error
+	
+	/* Retrieve movie watchlist */
+	tmp, err = getTraktWatchlist("movie")
+	if err != nil {
+		return nil, err
+	}
+	
+	/* Filter IMDB id's from result */
+	imdb_ids = filterTraktIds(tmp)
+	
+	/* Resolve matches */
+	imdb_ids = deDup(imdb_ids)
+	if len(imdb_ids) > 0 {
+		output, err = executeParallelResolution(imdb_ids, load_balancer_addr)
+	} else {
+		output = make([]map[string]interface{}, 0)
+	}
+	
+	/* Return matches */
+	return output, err
+}
+
+func (movieData) AddToWatchlist(item_type string, item_id string) (map[string]interface{}, error) {
+	var tmp map[string]interface{}
+	var video_obj map[string]interface{}
+	
+	/* Execute Trakt.tv watchlist insertion */
+	base_url := WatchlistAddUrl
+	if item_type == "movie" {
+		video_obj = map[string]interface{}{
+			"movies": []map[string]interface{}{
+				{"ids": map[string]interface{}{
+					"imdb": item_id,
+				}},
+			},
+		}
+	} else {
+		return nil, errors.New("Unknown item type")
+	}
+	req, err := newTraktRequest(base_url)
+	req.Post(video_obj, &tmp)
+	
+	return tmp, err
+}
+
+func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interface{}, error) {
+	var tmp []map[string]interface{}
+	var imdb_ids []string
+	
+	/* Execute Trakt.tv history retrieval */
+	req, err := newTraktRequest(traktPaginateUrl(HistoryGetUrl, 1, 50000))
+	req.Get(&tmp)
+	
+	/* Filter for IMDB id's */
+	imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "movie"))...)
+	imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "show"))...)
+	
+	/* Resolve in parallel */
+	ids := deDup(imdb_ids)
+	output, err := executeParallelResolution(ids, load_balancer_addr)
+	
+	return output, err
+}
+
+func (movieData) AddWatchHistory(item_type string, item_id string) (map[string]interface{}, error) {
+	var tmp map[string]interface{}
+	var video_obj map[string]interface{}
+	
+	/* Execute Trakt.tv history insertion */
+	var base_url string
+	if item_type == "movie" {
+		base_url = HistoryAddUrl
+		video_obj = map[string]interface{}{
+			"movies": []map[string]interface{}{
+				{"ids": map[string]interface{}{
+					"imdb": item_id,
+				}},
+			},
+		}
+	} else {
+		return nil, errors.New("Unknown item type")
+	}
+	req, err := newTraktRequest(base_url)
+	req.Post(video_obj, &tmp)
+	
+	return tmp, err
 }
 
 func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]interface{}, error) {

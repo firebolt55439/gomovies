@@ -217,6 +217,48 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				return outp, err
 			}
 			return nil, err
+		case "getWatchlist":
+			data, err := movieWorker.GetWatchlist(lb_ip.(string))
+			if err == nil {
+				outp := map[string]interface{}{
+					"watchlist": data,
+				}
+				return outp, err
+			}
+			return nil, err
+		case "addHistory":
+			// Takes {"item_type": <...>, "item_id": <...>}
+			item_type, ok := req_data["item_type"]
+			if !ok {
+				return nil, errors.New("Parameter `item_type` is required")
+			}
+			item_id, ok := req_data["item_id"]
+			if !ok {
+				return nil, errors.New("Parameter `item_id` is required")
+			}
+			data, err := movieWorker.AddWatchHistory(item_type.(string), item_id.(string))
+			return data, err
+		case "addToWatchlist":
+			// Takes {"item_type": <...>, "item_id": <...>}
+			item_type, ok := req_data["item_type"]
+			if !ok {
+				return nil, errors.New("Parameter `item_type` is required")
+			}
+			item_id, ok := req_data["item_id"]
+			if !ok {
+				return nil, errors.New("Parameter `item_id` is required")
+			}
+			data, err := movieWorker.AddToWatchlist(item_type.(string), item_id.(string))
+			return data, err
+		case "getHistory":
+			data, err := movieWorker.GetWatchHistory(lb_ip.(string))
+			if err == nil {
+				outp := map[string]interface{}{
+					"watched": data,
+				}
+				return outp, err
+			}
+			return nil, err
 		case "itemLookup":
 			id, ok := req_data["id"]
 			if !ok {

@@ -61,7 +61,7 @@ func main() {
 		configuration.TraktBaseUrl,
 		"Trakt Golang Client",
 		configuration.TraktClientId,
-		trakt.TokenAuth{AccessToken: "ACCESS_TOKEN"},
+		trakt.TokenAuth{AccessToken: configuration.TraktAccessToken},
 		nil,
 	)
 	

@@ -98,6 +98,46 @@ function getRecommendedMovies(limit, extension) {
 	});
 }
 
+function getWatchlist() {
+	return new Promise((resolve, reject) => {
+		apiReq("getWatchlist", {
+		}, function(data) {
+			resolve(data.watchlist);
+		});
+	});
+}
+
+function getWatched() {
+	return new Promise((resolve, reject) => {
+		apiReq("getHistory", {
+		}, function(data) {
+			resolve(data.watched);
+		});
+	});
+}
+
+function addToHistory(item_type, item_id) {
+	return new Promise((resolve, reject) => {
+		apiReq("addHistory", {
+			"item_type": item_type,
+			"item_id": item_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function addToWatchlist(item_type, item_id) {
+	return new Promise((resolve, reject) => {
+		apiReq("addToWatchlist", {
+			"item_type": item_type,
+			"item_id": item_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 function searchForItem(keyword) {
 	return new Promise((resolve, reject) => {
 		apiReq("searchForItem", {
@@ -141,7 +181,7 @@ function getDownloads() {
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
-let child, currentItem, lastDownloadedUrl
+let child, currentItem, lastDownloadedUrl, history
 $(function () {
 	// Set up notification permissions
 	if(Notification.permission !== "denied" && Notification.permission !== "granted") {
@@ -156,6 +196,36 @@ $(function () {
 		ret_div.append($('<div class="star-ratings-css-top" style="width: ' + Math.round(rating_percentage) + '%"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>'));
 		ret_div.append($('<div class="star-ratings-css-bottom"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>'));
 		return ret_div.wrap('<p/>').parent().html();
+	};
+	
+	// Define history functions.
+	history = {
+		"watchlist": [],
+		"watched": []
+	};
+	var refreshHistoryWatchlist = function() {
+		return new Promise((resolve, reject) => {
+			getWatchlist().then((data) => {
+				data = data.map((x) => x.imdb_code);
+				history.watchlist = data;
+				resolve();
+			});
+		});
+	};
+	var refreshHistoryWatched = function() {
+		return new Promise((resolve, reject) => {
+			getWatched().then((data) => {
+				data = data.map((x) => x.imdb_code);
+				history.watched = data;
+				resolve();
+			});
+		});
+	};
+	var isMovieInWatchlist = function(imdb_code) {
+		return history.watchlist.indexOf(imdb_code) !== -1;
+	};
+	var isMovieInWatched = function(imdb_code) {
+		return history.watched.indexOf(imdb_code) !== -1;
 	};
 	
 	// Function to generate markup for movie poster item in grid.
@@ -196,10 +266,10 @@ $(function () {
 			});
 			anc.append($('<span class="grid-button-right"><a href="' + hide_hash + '" class="btn btn-danger"><span class="glyphicon glyphicon-remove"></span></a></span>'));
 		}
-		if(false && history.isMovieInWatchlist(on.imdb_code)){
+		if(isMovieInWatchlist(on.imdb_code)){
 			anc.append($('<a class="top-left-corner btn btn-info"><span class="glyphicon glyphicon-th-list"></span></a>'));
 		}
-		if(false && history.hasFinishedMovie(on.imdb_code)){
+		if(isMovieInWatched(on.imdb_code)){
 			anc.append($('<a class="top-right-corner btn btn-success"><span class="glyphicon glyphicon-check"></span></a>'));
 			anc.append($('<span class="grid-button-bottom-left"><a href="' + watched_hash + '" class="btn btn-info"><span class="glyphicon glyphicon-check"></span></a></span>'));
 		} else {
@@ -321,7 +391,9 @@ $(function () {
 	var refreshHomepage = function() {
 		populateGrid(getRecommendedMovies, /*limit=*/12 * 1);
 	};
-	refreshHomepage();
+	refreshHistoryWatchlist().then(() => {
+		refreshHistoryWatched().then(refreshHomepage);
+	});
 	
 	// Detect when user has hit bottom of scrollable view and populate with new movies.
 	document.addEventListener('scroll', function (event) {
@@ -427,18 +499,24 @@ $(function () {
 			});
 		} else if(hash === "watched_recommendation"){
 			var imdb_id = params["id"];
-			frontpage.markWatchedById(imdb_id).then((status) => {
-				console.log("Successfully marked video as watched.");
-				console.log(status);
-				setTimeout(refreshHomepage, 150);
+			addToHistory("movie", imdb_id).then(() => {
+				refreshHistoryWatchlist().then(() => {
+					refreshHistoryWatched().then(() => {
+						console.log("Successfully marked video as watched.");
+						setTimeout(refreshHomepage, 150);
+					});
+				});
 			});
 		} else if(hash === "add_to_watchlist"){
 			var imdb_id = params["id"];
 			$('.loader').show();
-			frontpage.addToWatchlist(imdb_id).then(() => {
-				console.log("Successfully added video to watchlist.");
-				$('.loader').hide();
-				
+			addToWatchlist("movie", imdb_id).then(() => {
+				refreshHistoryWatchlist().then(() => {
+					console.log("Successfully added video to watchlist.");
+					$('.loader').hide();
+					setTimeout(refreshHomepage, 150);
+				});
+				/*
 				// Inform user.
 				var item = metadata.getItemById(imdb_id);
 				let notif = new Notification('Added To Watchlist', {
@@ -446,6 +524,7 @@ $(function () {
 					icon: item.cover_image,
 					silent: true
 				});
+				*/
 			});
 		} else if(hash === "refresh"){
 			$('#downloads').hide();
@@ -457,7 +536,7 @@ $(function () {
 		} else if(hash === "view_watchlist"){
 			$('#downloads').hide();
 			setTimeout(() => {
-				populateGrid(frontpage.getWatchlist, /*limit=*/12 * 1);
+				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
 			}, 150);
 		} else if(hash === "view_downloads"){
 			onHomepage = false;
