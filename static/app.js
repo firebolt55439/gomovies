@@ -498,10 +498,12 @@ $(function () {
 				setTimeout(refreshHomepage, 150);
 			});
 		} else if(hash === "watched_recommendation"){
+			$('.loader').show();
 			var imdb_id = params["id"];
 			addToHistory("movie", imdb_id).then(() => {
 				refreshHistoryWatchlist().then(() => {
 					refreshHistoryWatched().then(() => {
+						$('.loader').hide();
 						console.log("Successfully marked video as watched.");
 						setTimeout(refreshHomepage, 150);
 					});

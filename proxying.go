@@ -30,8 +30,8 @@ func proxyingMiddleware(ctx context.Context, instances string, logger log.Logger
 
 	// Set some parameters for our client.
 	var (
-		qps         = 10000                    // beyond which we will return an error
-		maxAttempts = 10                      // per request, before giving up
+		qps         = 100000                    // beyond which we will return an error
+		maxAttempts = 5                      // per request, before giving up
 		maxTime     = 25000 * time.Millisecond // wallclock time, before giving up
 	)
 
@@ -47,7 +47,13 @@ func proxyingMiddleware(ctx context.Context, instances string, logger log.Logger
 	for _, instance := range instanceList {
 		var e endpoint.Endpoint
 		e = makeMoviesProxy(ctx, instance)
-		e = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(e)
+		e = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{
+			Name: "Proxy Breaker",
+			ReadyToTrip: func(counts gobreaker.Counts) bool {
+				failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+				return counts.Requests >= 3 && failureRatio >= 0.6
+			},
+		}))(e)
 		e = ratelimit.NewTokenBucketLimiter(jujuratelimit.NewBucketWithRate(float64(qps), int64(qps)))(e)
 		endpointer = append(endpointer, e)
 	}
