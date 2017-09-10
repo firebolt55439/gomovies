@@ -30,7 +30,9 @@ $(function(){
 		// TODO: listen to window resize events, resize player
 		
 		// Instantiate player.
-		player = videojs('video-player', {}, function onPlayerReady() {
+		player = videojs('video-player', {
+			//"techOrder": ["Vlc"]
+		}, function onPlayerReady() {
 			// Hide loading text.
 			$('#loading-text').hide();
 			console.log("Video player is ready.");

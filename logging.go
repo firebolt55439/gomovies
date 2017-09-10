@@ -22,6 +22,9 @@ type logmw struct {
 func (mw logmw) Movies(s map[string]interface{}, ctx context.Context) (output map[string]interface{}, err error) {
 	defer func(begin time.Time) {
 		inp, ok := json.Marshal(s)
+		if len(inp) > 300 {
+			inp = []byte(string(inp[0:300]) + "...")
+		}
 		outp, ok := json.Marshal(output)
 		if len(outp) > 300 {
 			outp = []byte(string(outp[0:300]) + "...")

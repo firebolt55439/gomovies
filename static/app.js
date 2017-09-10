@@ -391,8 +391,12 @@ $(function () {
 	var refreshHomepage = function() {
 		populateGrid(getRecommendedMovies, /*limit=*/12 * 1);
 	};
+	$('.loader').show();
 	refreshHistoryWatchlist().then(() => {
-		refreshHistoryWatched().then(refreshHomepage);
+		refreshHistoryWatched().then(() => {
+			$('.loader').hide();
+			refreshHomepage();
+		});
 	});
 	
 	// Detect when user has hit bottom of scrollable view and populate with new movies.
@@ -548,6 +552,7 @@ $(function () {
 			var populateDownloads = (downloads) => {
 				var tbody = $('#downloads').find("tbody");
 				tbody.empty();
+				downloads = downloads || [];
 				console.log("Downloads:", downloads);
 				var keep_running = false;
 				for(var item of downloads){
@@ -562,6 +567,9 @@ $(function () {
 						if(prog == 0.0){
 							prog = 100.0;
 							desc = "Collecting seeds...";
+						} else if(prog == 101.0){
+							prog = 100.0;
+							desc = "Copying to folder...";
 						}
 						tr.append($('<td><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%;">' + desc + '</div></td>'));
 					} else {
@@ -660,7 +668,7 @@ $(function () {
 						silent: true
 					});
 					notif.onclick = () => {};
-					history.pushState(null, null, '#view_downloads');
+					window.history.pushState(null, null, '#view_downloads');
 					$(window).trigger('hashchange');
 				}
 			});
