@@ -458,6 +458,28 @@ $(function () {
 		var contentWin = $('#frameModal').find("iframe").get(0).contentWindow;
 		contentWin.postMessage(json_str, "*");
 	}
+	var retrieveFileUrl = function(folder_id, should_download) {
+		return new Promise((resolve, reject) => {
+			apiReq("oauthApiCall", {
+				"path": "folder/" + folder_id,
+				"method": "GET"
+			}, function(data) {
+				console.log("retrieved folder:", data);
+				var files = data.files.filter((x) => x.play_video || parseFloat(x.video_progress) >= 0.00)
+				files.sort((a, b) => a.size < b.size); // descending order sort by size
+				console.log(files);
+				var file = files[0];
+				apiReq("oauthQuery", {
+					"function": (should_download ? "fetch_file" : "fetch_file_view"),
+					"data": {
+						"folder_file_id": file.folder_file_id.toString()
+					}
+				}, function(file_data) {
+					resolve(file_data);
+				});
+			});
+		});
+	}
 
 	// Intercept hashchange event and display player.
 	$(window).on('hashchange', function() {
@@ -492,6 +514,7 @@ $(function () {
 		} else if(hash === "search"){
 			$('#carousel_space').empty();
 			$('#downloads').hide();
+			$('.quota-bars').hide();
 			setTimeout(() => {
 				populateGrid((limit) => searchForItem(params.key), /*limit=*/12 * 1);
 			}, 150);
@@ -534,6 +557,7 @@ $(function () {
 			});
 		} else if(hash === "refresh"){
 			$('#downloads').hide();
+			$('.quota-bars').hide();
 			setTimeout(refreshHomepage, 10);
 		} else if(hash === "reload"){
 			setTimeout(() => {
@@ -541,6 +565,7 @@ $(function () {
 			}, 10);
 		} else if(hash === "view_watchlist"){
 			$('#downloads').hide();
+			$('.quota-bars').hide();
 			setTimeout(() => {
 				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
 			}, 150);
@@ -576,7 +601,27 @@ $(function () {
 						var watch_hash = '#watch_download?' + $.param({
 							"folder_id": item.id
 						})
-						tr.append($('<td><a href="' + watch_hash + '" class="btn btn-success" role="button">Watch <span class="glyphicon glyphicon-film"></span></a></td>'));
+						var download_btn_id = 'download-btn-' + item.id;
+						tr.append($('<td> \
+							<a href="' + watch_hash + '" class="btn btn-success" role="button"> \
+								Watch <span class="glyphicon glyphicon-film"></span> \
+							</a> \
+							&nbsp; \
+							<a href="#" class="btn btn-primary" role="button" id="' + download_btn_id + '"> \
+								Download <span class="glyphicon glyphicon-download-alt"></span> \
+							</a> \
+						</td>'));
+						tr.find(".btn-primary").click(function(folder_id) {
+							return function() {
+								$('.loader').show();
+								retrieveFileUrl(folder_id, /*should_download=*/true).then((file_data) => {
+									$('.loader').hide();
+									console.log("fetch (dl):", file_data);
+									var url = file_data.url;
+									window.location = url;
+								});
+							};
+						}(item.id));
 					}
 					if(item.warnings){
 						tr.addClass("warning");
@@ -607,31 +652,17 @@ $(function () {
 				}, 4000);
 				$('.loader').hide();
 				$('#downloads').show();
+				$('.quota-bars').show();
 			});
 		} else if(hash === "watch_download"){
 			var folder_id = params.folder_id;
-			apiReq("oauthApiCall", {
-				"path": "folder/" + folder_id,
-				"method": "GET"
-			}, function(data) {
-				console.log("retrieved folder:", data);
-				var files = data.files.filter((x) => x.play_video || parseFloat(x.video_progress) >= 0.00)
-				files.sort((a, b) => a.size < b.size); // descending order sort by size
-				console.log(files);
-				var file = files[0];
-				apiReq("oauthQuery", {
-					"function": "fetch_file_view",
-					"data": {
-						"folder_file_id": file.folder_file_id.toString()
-					}
-				}, function(file_data) {
-					console.log("fetch:", file_data);
-					var url = file_data.url;
-					lastDownloadedUrl = url;
-					openPage({
-						"path": "/static/watch.html",
-						"allowFullScreen": true
-					});
+			retrieveFileUrl(folder_id, /*should_download=*/false).then((file_data) => {
+				console.log("fetch:", file_data);
+				var url = file_data.url;
+				lastDownloadedUrl = url;
+				openPage({
+					"path": "/static/watch.html",
+					"allowFullScreen": true
 				});
 			});
 		}

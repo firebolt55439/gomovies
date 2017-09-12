@@ -106,7 +106,7 @@ const (
 
 var cache *freecache.Cache = freecache.NewCache(20 * 1024 * 1024)
 var netClient = &http.Client{
-	Timeout: 15 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error) {
@@ -395,16 +395,25 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 	//fmt.Println(to_send)
 	
 	/* Execute the request */
-	res, err := netClient.Post(
-		posting_url,
-		"application/json; charset=utf-8",
-		to_send,
-	)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return nil, err
+	var res (*http.Response)
+	var err error
+	for ct := 0; ; ct += 1 {
+		res, err = netClient.Post(
+			posting_url,
+			"application/json; charset=utf-8",
+			to_send,
+		)
+		if err != nil {
+			fmt.Println("Error:", err)
+			if ct > 5 {
+				return nil, err
+			}
+			fmt.Println("Retrying - error #" + strconv.Itoa(ct))
+			continue
+		}
+		defer res.Body.Close()
+		break
 	}
-	defer res.Body.Close()
 	
 	/* Parse the response */
 	var got moviesResponse
