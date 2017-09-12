@@ -604,8 +604,8 @@ $(function () {
 					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
 					if(item.progress){
 						keep_running = true;
-						var prog = parseFloat(item.progress);
-						var desc = "" + prog.toString() + "%";
+						var prog = parseFloat(item.progress).toFixed(2);
+						var desc = prog + "%";
 						if(prog == 0.0){
 							prog = 100.0;
 							desc = "Collecting hosts...";
