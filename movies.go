@@ -133,9 +133,16 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	// Download IMDB url
 	parsed["imdb_code"] = id
 	imdb_url := fmt.Sprintf("http://www.imdb.com/title/%s/", id)
-	resp, ok := netClient.Get(imdb_url)
-	if ok != nil {
-		return nil, ok
+	var resp (*http.Response)
+	for ct := 0;; ct += 1 {
+		resp, err = netClient.Get(imdb_url)
+		if err != nil {
+			if ct > 5 {
+				return nil, err
+			}
+			continue
+		}
+		break
 	}
 	bytes, _ := ioutil.ReadAll(resp.Body)
 	body := string(bytes)
@@ -412,24 +419,30 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 			continue
 		}
 		defer res.Body.Close()
-		break
-	}
+		
+		/* Parse the response */
+		var got moviesResponse
+		json.NewDecoder(res.Body).Decode(&got)
+		interface_arr, ok := got.V["resolved"].([]interface{})
+		if !ok {
+			fmt.Println("Could not resolve, retrying:", posting_url)
+			fmt.Println(got)
+			if ct > 5 {
+				fmt.Println("Giving up")
+				return make([]map[string]interface{}, 0), nil
+			}
+			//return nil, errors.New("Resolution unsuccessful")
+			continue
+		}
 	
-	/* Parse the response */
-	var got moviesResponse
-	json.NewDecoder(res.Body).Decode(&got)
-	interface_arr, ok := got.V["resolved"].([]interface{})
-	if !ok {
-		return nil, errors.New("Resolution unsuccessful")
-	}
+		/* Convert output to desired format */
+		for _, elem := range interface_arr {
+			output = append(output, elem.(map[string]interface{}))
+		}
 	
-	/* Convert output to desired format */
-	for _, elem := range interface_arr {
-		output = append(output, elem.(map[string]interface{}))
+		/* Return parsed response */
+		return output, nil
 	}
-	
-	/* Return parsed response */
-	return output, nil
 }
 
 func (movieData) GetRecommendedMovies(extension int, load_balancer_addr string) (ret []map[string]interface{}, err error) {
@@ -606,9 +619,16 @@ func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface
 	var err error
 	
 	/* Retrieve movie watchlist */
-	tmp, err = getTraktWatchlist("movie")
-	if err != nil {
-		return nil, err
+	for ct := 0;; ct += 1 {
+		tmp, err = getTraktWatchlist("movie")
+		if err != nil {
+			if ct > 5 {
+				return nil, err
+			}
+			fmt.Println("Retrying - error:", err)
+			continue
+		}
+		break
 	}
 	
 	/* Filter IMDB id's from result */
@@ -654,8 +674,17 @@ func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interf
 	var imdb_ids []string
 	
 	/* Execute Trakt.tv history retrieval */
-	req, err := newTraktRequest(traktPaginateUrl(HistoryGetUrl, 1, 50000))
-	req.Get(&tmp)
+	for ct := 0;; ct += 1 {
+		req, err := newTraktRequest(traktPaginateUrl(HistoryGetUrl, 1, 50000))
+		if err != nil {
+			if ct > 5 {
+				return nil, err
+			}
+			continue
+		}
+		req.Get(&tmp)
+		break
+	}
 	
 	/* Filter for IMDB id's */
 	imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "movie"))...)

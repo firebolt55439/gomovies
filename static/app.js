@@ -27,6 +27,23 @@
     };
 })();
 
+// From https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable-string
+function humanFileSize(bytes, si) {
+    var thresh = si ? 1000 : 1024;
+    if(Math.abs(bytes) < thresh) {
+        return bytes + ' B';
+    }
+    var units = si
+        ? ['kB','MB','GB','TB','PB','EB','ZB','YB']
+        : ['KiB','MiB','GiB','TiB','PiB','EiB','ZiB','YiB'];
+    var u = -1;
+    do {
+        bytes /= thresh;
+        ++u;
+    } while(Math.abs(bytes) >= thresh && u < units.length - 1);
+    return bytes.toFixed(1)+' '+units[u];
+}
+
 // Define API request function
 function apiReq(type, data, cb) {
 	$.ajax({
@@ -591,7 +608,7 @@ $(function () {
 						var desc = "" + prog.toString() + "%";
 						if(prog == 0.0){
 							prog = 100.0;
-							desc = "Collecting seeds...";
+							desc = "Collecting hosts...";
 						} else if(prog == 101.0){
 							prog = 100.0;
 							desc = "Copying to folder...";
@@ -634,6 +651,28 @@ $(function () {
 					}
 					tbody.append(tr);
 				}
+				apiReq("oauthQuery", {
+					"function": "get_memory_bandwidth",
+					"data": {}
+				}, function(data) {
+					for(var k in data){
+						data[k] = parseFloat(data[k]);
+					}
+					var space_ratio = 100.0 * data.space_used / data.space_max;
+					var bandwidth_ratio = 100.0 * data.bandwidth_used / data.bandwidth_max;
+					var space_bar = $('.space-bar').find(".progress-bar");
+					var bandwidth_bar = $('.bandwidth-bar').find(".progress-bar");
+					
+					space_ratio = space_ratio.toFixed(2) + "%";
+					bandwidth_ratio = bandwidth_ratio.toFixed(2) + "%";
+					space_bar.css("width", space_ratio);
+					bandwidth_bar.css("width", bandwidth_ratio);
+					
+					var space_desc = humanFileSize(data.space_used) + "/" + humanFileSize(data.space_max);
+					var bandwidth_desc = humanFileSize(data.bandwidth_used) + "/" + humanFileSize(data.bandwidth_max);
+					space_bar.text(space_desc);
+					bandwidth_bar.text(bandwidth_desc);
+				});
 				return keep_running;
 			};
 			var downloadInterval = null;
