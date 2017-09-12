@@ -37,7 +37,11 @@ function renderOptions(event, item){
 			// (min, 0) --> (max, 100); m = 100.0 / (max - min);
 			var slope = 100.0 / (max_hosters - min_hosters);
 			var y_intercept = 100.0 - (slope * max_hosters);
-			getScaledhosts = (hosts) => (slope * hosts + y_intercept);
+			if(max_hosters != min_hosters){
+				getScaledhosts = (hosts) => (slope * hosts + y_intercept);
+			} else {
+				getScaledhosts = (hosts) => Math.max(Math.min(hosts, 100), 0);
+			}
 		} else {
 			$('#quality_header').hide();
 			$('#none_available').show();
