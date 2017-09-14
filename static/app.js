@@ -678,17 +678,19 @@ $(function () {
 			var downloadInterval = null;
 			getDownloads().then((downloads) => {
 				var shouldRunAgain = populateDownloads(downloads);
-				downloadInterval = setInterval(function() {
-					getDownloads().then((downloads) => {
-						if(!downloads || !downloads.length){
-							clearInterval(downloadInterval);
-							return;
-						}
-						if(!populateDownloads(downloads) || !$('#downloads').is(':visible')){
-							clearInterval(downloadInterval);
-						}
-					});
-				}, 4000);
+				if(shouldRunAgain){
+					downloadInterval = setInterval(function() {
+						getDownloads().then((downloads) => {
+							if(!downloads || !downloads.length){
+								clearInterval(downloadInterval);
+								return;
+							}
+							if(!populateDownloads(downloads) || !$('#downloads').is(':visible')){
+								clearInterval(downloadInterval);
+							}
+						});
+					}, 4000);
+				}
 				$('.loader').hide();
 				$('#downloads').show();
 				$('.quota-bars').show();
