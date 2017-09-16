@@ -106,7 +106,7 @@ const (
 
 var cache *freecache.Cache = freecache.NewCache(20 * 1024 * 1024)
 var netClient = &http.Client{
-	Timeout: 10 * time.Second,
+	Timeout: 35 * time.Second,
 }
 
 func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error) {
@@ -140,6 +140,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 			if ct > 5 {
 				return nil, err
 			}
+			time.Sleep(200 * time.Millisecond)
 			continue
 		}
 		break
@@ -402,10 +403,8 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 	//fmt.Println(to_send)
 	
 	/* Execute the request */
-	var res (*http.Response)
-	var err error
 	for ct := 0; ; ct += 1 {
-		res, err = netClient.Post(
+		res, err := netClient.Post(
 			posting_url,
 			"application/json; charset=utf-8",
 			to_send,
@@ -418,11 +417,13 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 			fmt.Println("Retrying - error #" + strconv.Itoa(ct))
 			continue
 		}
-		defer res.Body.Close()
 		
 		/* Parse the response */
 		var got moviesResponse
-		json.NewDecoder(res.Body).Decode(&got)
+		req_resp, _ := ioutil.ReadAll(res.Body)
+		if err = json.Unmarshal([]byte(req_resp), &got); err != nil {
+			return nil, errors.New(fmt.Sprintf("err: %s; body: %s", err, string(req_resp)))
+		}
 		interface_arr, ok := got.V["resolved"].([]interface{})
 		if !ok {
 			fmt.Println("Could not resolve, retrying:", posting_url)
