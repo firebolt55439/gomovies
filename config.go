@@ -1,5 +1,7 @@
 package main
 
+type SourceConfig map[string]interface{}
+
 type Configuration struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -20,14 +22,9 @@ type Configuration struct {
 	DownloadUriOauthParam string `json:"download_uri_oauth_param"`
 	OauthDownloadingPath string `json:"oauth_downloading_path"`
 	
-	SourceApiBaseUrl string `json:"source_api_base_url"`
-	SourceApiClientId string `json:"source_api_client_id"`
-	SourceApiSortKey string `json:"source_api_sort_key"`
-	SourceApiResultLimit int `json:"source_api_result_limit"`
-	SourceApiHdTitle string `json:"source_api_hd_title"`
-	SourceApiSourceKey string `json:"source_api_source_key"`
-	SourceApiClientKey string `json:"source_api_client_key"`
-	SourceApiHostname string `json:"source_api_hostname"`
+	TitleQualityHDKeywords []string `mapstructure:"hd_titles"`
+	
+	Sources []SourceConfig `json:"sources"`
 }
 
 var configuration = Configuration{}

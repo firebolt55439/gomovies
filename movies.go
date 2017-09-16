@@ -431,6 +431,7 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 				fmt.Println("Giving up")
 				return make([]map[string]interface{}, 0), nil
 			}
+			time.Sleep(500 * time.Millisecond)
 			//return nil, errors.New("Resolution unsuccessful")
 			continue
 		}

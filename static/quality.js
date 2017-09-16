@@ -20,15 +20,26 @@ function renderOptions(event, item){
     var fillInOptions = function(sources) {
     	$('#options').empty();
 		var sort_order = {
-			"3D": 1,
-			"HD": 2,
-			"1080p": 3,
-			"720p": 4
+			"4K": 1,
+			"3D": 2,
+			"HD": 3,
+			"1080p": 4,
+			"720p": 5,
+			"SD": 6
 		}
-		sources.sort((a, b) => {
-			var x = sort_order[a.quality], y = sort_order[b.quality];
-			return (y - x);
+		var by_quality = Object.keys(sort_order).map(x => []);
+		for(var on of sources){
+			var idx = sort_order[on.quality] - 1;
+			by_quality[idx].push(on);
+		}
+		by_quality = by_quality.map((arr) => {
+			arr.sort((a, b) => {
+				return b.sources - a.sources;
+			});
+			return arr;
 		});
+		sources = [];
+		for(var on of by_quality) sources = sources.concat(on);
 		var getScaledhosts;
 		if(sources.length > 0){
 			var host_counts = sources.map((x) => parseInt(x.sources));

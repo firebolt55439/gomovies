@@ -586,6 +586,12 @@ $(function () {
 			setTimeout(() => {
 				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
 			}, 150);
+		} else if(hash === "view_history"){
+			$('#downloads').hide();
+			$('.quota-bars').hide();
+			setTimeout(() => {
+				populateGrid((limit) => getWatched(), /*limit=*/12 * 1);
+			}, 150);
 		} else if(hash === "view_downloads"){
 			onHomepage = false;
 			$('#carousel_space').empty();
