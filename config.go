@@ -12,6 +12,10 @@ type Configuration struct {
 	ApiUrl string `json:"api_url"`
 	RestApiUrl string `json:"rest_api_url"`
 	
+	ClientTimeoutSeconds int `json:"client_timeout_seconds"`
+	ClientMaxRetries int `json:"client_max_retries"`
+	ClientConcurrency int `json:"client_concurrency"`
+	
 	TraktBaseUrl string `json:"trakt_base_url"`
 	TraktClientId string `json:"trakt_client_id"`
 	TraktClientSecret string `json:"trakt_client_secret"`

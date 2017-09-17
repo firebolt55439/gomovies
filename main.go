@@ -7,6 +7,7 @@ import (
 	"os"
 	"fmt"
 	"encoding/json"
+	"time"
 	
 	"github.com/42minutes/go-trakt"
 
@@ -46,6 +47,11 @@ func main() {
 	}/* else {
 		fmt.Println(configuration)
 	}*/
+	
+	/* Initialize client */
+	netClient.Timeout = time.Duration(configuration.ClientTimeoutSeconds) * time.Second
+	netClient.MaxRetries = configuration.ClientMaxRetries
+	netClient.Concurrency = configuration.ClientConcurrency
 	
 	/* Initialize OAuth */
 	oAuth = OAuth{

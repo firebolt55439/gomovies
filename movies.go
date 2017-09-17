@@ -18,6 +18,7 @@ import (
 	
 	"github.com/coocood/freecache"
 	"github.com/42minutes/go-trakt"
+	"github.com/sethgrid/pester"
 )
 
 type MovieData interface {
@@ -105,9 +106,7 @@ const (
 )
 
 var cache *freecache.Cache = freecache.NewCache(20 * 1024 * 1024)
-var netClient = &http.Client{
-	Timeout: 35 * time.Second,
-}
+var netClient = pester.New()
 
 func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error) {
 	defer func() {
