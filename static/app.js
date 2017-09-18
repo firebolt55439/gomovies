@@ -475,7 +475,7 @@ $(function () {
 		var contentWin = $('#frameModal').find("iframe").get(0).contentWindow;
 		contentWin.postMessage(json_str, "*");
 	}
-	var retrieveFileUrl = function(folder_id, should_download) {
+	var retrieveFileObj = function(folder_id) {
 		return new Promise((resolve, reject) => {
 			apiReq("oauthApiCall", {
 				"path": "folder/" + folder_id,
@@ -486,6 +486,13 @@ $(function () {
 				files.sort((a, b) => a.size < b.size); // descending order sort by size
 				console.log(files);
 				var file = files[0];
+				resolve(file);
+			});
+		});
+	};
+	var retrieveFileUrl = function(folder_id, should_download) {
+		return new Promise((resolve, reject) => {
+			retrieveFileObj(folder_id).then((file) => {
 				apiReq("oauthQuery", {
 					"function": (should_download ? "fetch_file" : "fetch_file_view"),
 					"data": {
@@ -597,7 +604,19 @@ $(function () {
 			$('#carousel_space').empty();
 			$('#grid').empty();
 			$('.loader').show();
-			var populateDownloads = (downloads) => {
+			var downloadInterval = null, populateDownloads = null;
+			var populateDownloadsHelper = function() {
+				getDownloads().then((downloads) => {
+					if(!downloads || !downloads.length){
+						clearInterval(downloadInterval);
+						return;
+					}
+					if(!populateDownloads(downloads) || !$('#downloads').is(':visible')){
+						clearInterval(downloadInterval);
+					}
+				});
+			};
+			populateDownloads = (downloads) => {
 				var tbody = $('#downloads').find("tbody");
 				tbody.empty();
 				downloads = downloads || [];
@@ -625,6 +644,7 @@ $(function () {
 							"folder_id": item.id
 						})
 						var download_btn_id = 'download-btn-' + item.id;
+						var delete_btn_id = 'delete-btn-' + item.id;
 						tr.append($('<td> \
 							<a href="' + watch_hash + '" class="btn btn-success" role="button"> \
 								Watch <span class="glyphicon glyphicon-film"></span> \
@@ -632,6 +652,10 @@ $(function () {
 							&nbsp; \
 							<a href="#" class="btn btn-primary" role="button" id="' + download_btn_id + '"> \
 								Download <span class="glyphicon glyphicon-download-alt"></span> \
+							</a> \
+							&nbsp; \
+							<a href="#" class="btn btn-danger" role="button" id="' + delete_btn_id + '"> \
+								Delete <span class="glyphicon glyphicon-trash"></span> \
 							</a> \
 						</td>'));
 						tr.find(".btn-primary").click(function(folder_id) {
@@ -642,6 +666,25 @@ $(function () {
 									console.log("fetch (dl):", file_data);
 									var url = file_data.url;
 									window.location = url;
+									setTimeout(populateDownloadsHelper, 200);
+								});
+							};
+						}(item.id));
+						tr.find(".btn-danger").click(function(folder_id) {
+							return function() {
+								$('.loader').show();
+								retrieveFileObj(folder_id).then((file_obj) => {
+									console.log("file obj:", file_obj);
+									apiReq("oauthQuery", {
+										"function": "delete",
+										"data": {
+											"delete_arr": "[{\"type\": \"folder\", \"id\": \"" + file_obj.folder_id + "\"}]"
+										}
+									}, function(res) {
+										console.log("del output:", res);
+										$('.loader').hide();
+										setTimeout(populateDownloadsHelper, 200);
+									});
 								});
 							};
 						}(item.id));
@@ -681,21 +724,10 @@ $(function () {
 				});
 				return keep_running;
 			};
-			var downloadInterval = null;
 			getDownloads().then((downloads) => {
 				var shouldRunAgain = populateDownloads(downloads);
 				if(shouldRunAgain){
-					downloadInterval = setInterval(function() {
-						getDownloads().then((downloads) => {
-							if(!downloads || !downloads.length){
-								clearInterval(downloadInterval);
-								return;
-							}
-							if(!populateDownloads(downloads) || !$('#downloads').is(':visible')){
-								clearInterval(downloadInterval);
-							}
-						});
-					}, 4000);
+					downloadInterval = setInterval(populateDownloadsHelper, 4000);
 				}
 				$('.loader').hide();
 				$('#downloads').show();

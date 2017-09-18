@@ -673,6 +673,7 @@ func (movieData) AddToWatchlist(item_type string, item_id string) (map[string]in
 func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interface{}, error) {
 	var tmp []map[string]interface{}
 	var imdb_ids []string
+	var ids []string
 	
 	/* Execute Trakt.tv history retrieval */
 	for ct := 0;; ct += 1 {
@@ -684,15 +685,22 @@ func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interf
 			continue
 		}
 		req.Get(&tmp)
-		break
+		
+		/* Filter for IMDB id's */
+		imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "movie"))...)
+		imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "show"))...)
+		
+		ids = deDup(imdb_ids)
+		
+		if len(ids) > 0 {
+			break
+		}
+		if ct > 5 {
+			return nil, errors.New("Gave up for Trakt history retrieval")
+		}
 	}
 	
-	/* Filter for IMDB id's */
-	imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "movie"))...)
-	imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "show"))...)
-	
 	/* Resolve in parallel */
-	ids := deDup(imdb_ids)
 	output, err := executeParallelResolution(ids, load_balancer_addr)
 	
 	return output, err
