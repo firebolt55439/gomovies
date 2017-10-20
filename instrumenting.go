@@ -5,7 +5,7 @@ import (
 	"time"
 	"context"
 
-	"github.com/go-kit/kit/metrics"
+	metrics "github.com/go-kit/kit/metrics"
 )
 
 func instrumentingMiddleware(
