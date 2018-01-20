@@ -418,7 +418,8 @@ $(function () {
 	
 	// Detect when user has hit bottom of scrollable view and populate with new movies.
 	document.addEventListener('scroll', function (event) {
-		if(document.body.scrollHeight == document.body.scrollTop + window.innerHeight) {
+		//console.log($(window).scrollTop() + $(window).height(), $(document).height());
+		if($(document).height() == $(window).scrollTop() + $(window).height()) {
 			if(onHomepage){
 				++autoPopulationCounter;
 				console.log("Hit rock bottom.", autoPopulationCounter);
@@ -765,21 +766,37 @@ $(function () {
 				console.log("fetch result:", data);
 				$('.loader').hide();
 				if(data.result !== true){
+					swal({
+						title: "Unable to download",
+						icon: "error"
+					});
+					/*
 					let notif = new Notification('Unable to Download', {
 						body: "Could not begin download.",
 						icon: currentItem.cover_image,
 						silent: true
 					});
 					notif.onclick = () => {};
+					*/
 				} else {
+					/*
 					let notif = new Notification(currentItem.title, {
 						body: "Download has begun.",
 						icon: currentItem.cover_image,
 						silent: true
 					});
 					notif.onclick = () => {};
-					window.history.pushState(null, null, '#view_downloads');
-					$(window).trigger('hashchange');
+					*/
+					swal({
+						title: "Download has begun",
+						text: "Successfully began download.",
+						icon: "success",
+						buttons: false,
+						timer: 3000
+					}).then(() => {
+						window.history.pushState(null, null, '#view_downloads');
+						$(window).trigger('hashchange');
+					});
 				}
 			});
 		} else if(type === "watch_window_open"){

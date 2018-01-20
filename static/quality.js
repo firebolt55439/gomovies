@@ -85,10 +85,49 @@ function renderOptions(event, item){
 			var that = $(this);
 			var url = that.data("url");
 			//console.log("selected url:", url);
-			window.parent.postMessage(JSON.stringify({
-				type: "quality_select",
-				data: url
-			}), "*");
+			swal({
+				title: "Choose Method",
+				text: "How would you like to download this?",
+				buttons: {
+					cancel: "Cancel",
+					myself: {
+						text: "Myself",
+						value: "myself"
+					},
+					cloud: {
+						text: "Via Cloud",
+						value: "cloud"
+					}
+				},
+				icon: "info"
+			}).then((value) => {
+				if(value === "cloud"){
+					window.parent.postMessage(JSON.stringify({
+						type: "quality_select",
+						data: url
+					}), "*");
+					throw null;
+				} else if(value === "myself"){
+					return swal({
+						title: "Are you sure?",
+						text: "Would you really like to download yourself?",
+						icon: "warning",
+						buttons: true,
+						dangerMode: true
+					});
+				}
+			}).then(value => {
+				if(value){
+					window.location.href = url;
+				}
+			}).catch(err => {
+				if(!err){
+					swal.stopLoading();
+					swal.close();
+				} else {
+					swal("Error!", err.toString(), "error");
+				}
+			});
 		});
 	
 		// Initialize tooltips.
