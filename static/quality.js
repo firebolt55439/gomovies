@@ -110,14 +110,26 @@ function renderOptions(event, item){
 				} else if(value === "myself"){
 					return swal({
 						title: "Are you sure?",
-						text: "Would you really like to download yourself?",
+						text: "Would you really like to download this yourself?",
 						icon: "warning",
-						buttons: true,
+						buttons: {
+							cancel: true,
+							confirm: {
+								text: "Yes, I am sure"
+							}
+						},
 						dangerMode: true
 					});
 				}
 			}).then(value => {
 				if(value){
+					swal({
+						title: "Download has begun",
+						text: "Successfully began download.",
+						icon: "success",
+						buttons: false,
+						timer: 3000
+					});
 					window.location.href = url;
 				}
 			}).catch(err => {

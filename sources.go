@@ -388,7 +388,7 @@ func SearchSourcesParallel(opts map[string]interface{}) (ret []ItemSource, err e
     }()
     err = nil
     parsed := make(chan []ItemSource, len(sources))
-    
+
     /* Search sources in parallel */
     source_idx := 0
     for _, fn := range sources {
@@ -403,7 +403,7 @@ func SearchSourcesParallel(opts map[string]interface{}) (ret []ItemSource, err e
     	} (fn, configuration.Sources[source_idx])
     	source_idx += 1
     }
-    
+
     /* Populate result array from channel */
     count := 0
     for ; count < len(sources); {
@@ -413,7 +413,7 @@ func SearchSourcesParallel(opts map[string]interface{}) (ret []ItemSource, err e
     		ret = append(ret, on...)
     	}
     }
-    
+
     /* Return result */
     return ret, err
 }
