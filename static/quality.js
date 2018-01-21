@@ -79,7 +79,7 @@ function renderOptions(event, item){
 			//console.log(parseInt(on.sources), scaled, scaled_rgb, li);
 			$('#options').append(li);
 		}
-		
+
 		// Install click handler.
 		$('.opt-select').click(function() {
 			var that = $(this);
@@ -146,7 +146,7 @@ function renderOptions(event, item){
 		$('[data-toggle="tooltip"]').tooltip();
     };
     fillInOptions(item.sources);
-    
+
     // Handle TV shows.
     /*
     var main_console = remote.getGlobal("console");
@@ -213,7 +213,7 @@ $(function() {
 			renderOptions(e, JSON.parse(e.data));
 		}, 10);
 	}, false);
-	
+
 	window.parent.postMessage(JSON.stringify({
 		"type": "quality_window_open",
 		"data": {}

@@ -470,7 +470,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				ImdbCode: search_term,
 				Quality: on["quality"].(string),
 				Size: bytesToSize(on["size_bytes"].(float64)),
-				Filename: matched["title"].(string),
+				Filename: "(no filename available)",
 				Url: uri,
 				SourceCount: int(on[configuration.SourceApiSourceKey].(float64)),
 				ClientCount: int(on[configuration.SourceApiClientKey].(float64)),

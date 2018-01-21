@@ -313,6 +313,7 @@ $(function () {
 	
 	// Populate grid with top movies by default, or requested movies if search term exists.
 	var onHomepage = false, autoPopulationCounter = 0;
+	var customRefreshTitle, customRefreshMessage, customRefreshTimer = 2000;
 	var populateGrid = (callback, limit) => {
 		onHomepage = (callback === getRecommendedMovies); // for auto-population
 		autoPopulationCounter = 0; // reset auto-population counter
@@ -403,6 +404,17 @@ $(function () {
 				$('#grid').append(li);
 			}
 			$('.loader').hide();
+
+			// Inform user of success
+			swal({
+				title: (customRefreshTitle || "Refreshed Content"),
+				text: (customRefreshMessage || "Reloaded items from server."),
+				icon: "success",
+				buttons: false,
+				timer: customRefreshTimer
+			});
+			customRefreshTitle = customRefreshMessage = undefined;
+			customRefreshTimer = 2000;
 		});
 	};
 	var refreshHomepage = function() {
@@ -412,6 +424,8 @@ $(function () {
 	refreshHistoryWatchlist().then(() => {
 		refreshHistoryWatched().then(() => {
 			$('.loader').hide();
+			customRefreshTitle = "Initialized catalog";
+			customRefreshMessage = "Successfully initialized server catalog.";
 			refreshHomepage();
 		});
 	});
@@ -427,14 +441,7 @@ $(function () {
 				disableScroll();
 				getRecommendedMovies(12, autoPopulationCounter).then((data) => {
 					console.log(data);
-					
-					// Inform user.
-					let notif = new Notification('Extended Results', {
-						body: "Added " + data.length + " result(s).",
-						silent: true
-					});
-					notif.onclick = () => {};
-					
+
 					// Append to grid.
 					$('#grid').append(retrieveBlankCoverMarkup());
 					for(var on of data){
@@ -443,6 +450,15 @@ $(function () {
 					}
 					$('.loader').hide();
 					enableScroll();
+
+					// Inform user.
+					swal({
+						title: "Extended results",
+						text: "Added " + data.length + " " + (data.length == 1 ? "result" : "results") + ".",
+						icon: "success",
+						buttons: false,
+						timer: 1000
+					});
 				});
 			}
 		}
@@ -540,6 +556,9 @@ $(function () {
 			$('#carousel_space').empty();
 			$('#downloads').hide();
 			$('.quota-bars').hide();
+			customRefreshTitle = "Executed search";
+			customRefreshMessage = "Successfully executed search on server.";
+			customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => searchForItem(params.key), /*limit=*/12 * 1);
 			}, 150);
@@ -556,6 +575,9 @@ $(function () {
 				refreshHistoryWatchlist().then(() => {
 					refreshHistoryWatched().then(() => {
 						$('.loader').hide();
+						customRefreshTitle = "Added to history";
+						customRefreshMessage = "Successfully marked item as watched.";
+						customRefreshTimer = 1500;
 						console.log("Successfully marked video as watched.");
 						setTimeout(refreshHomepage, 150);
 					});
@@ -566,6 +588,9 @@ $(function () {
 			$('.loader').show();
 			addToWatchlist("movie", imdb_id).then(() => {
 				refreshHistoryWatchlist().then(() => {
+					customRefreshTitle = "Added to watchlist";
+					customRefreshMessage = "Successfully added item to watchlist.";
+					customRefreshTimer = 1500;
 					console.log("Successfully added video to watchlist.");
 					$('.loader').hide();
 					setTimeout(refreshHomepage, 150);
@@ -591,12 +616,18 @@ $(function () {
 		} else if(hash === "view_watchlist"){
 			$('#downloads').hide();
 			$('.quota-bars').hide();
+			customRefreshTitle = "Retrived watchlist";
+			customRefreshMessage = "Successfully retrieved watchlist from server.";
+			customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
 			}, 150);
 		} else if(hash === "view_history"){
 			$('#downloads').hide();
 			$('.quota-bars').hide();
+			customRefreshTitle = "Retrived history";
+			customRefreshMessage = "Successfully retrieved history from server.";
+			customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => getWatched(), /*limit=*/12 * 1);
 			}, 150);
@@ -767,26 +798,10 @@ $(function () {
 				$('.loader').hide();
 				if(data.result !== true){
 					swal({
-						title: "Unable to download",
+						title: "Unable to download item",
 						icon: "error"
 					});
-					/*
-					let notif = new Notification('Unable to Download', {
-						body: "Could not begin download.",
-						icon: currentItem.cover_image,
-						silent: true
-					});
-					notif.onclick = () => {};
-					*/
 				} else {
-					/*
-					let notif = new Notification(currentItem.title, {
-						body: "Download has begun.",
-						icon: currentItem.cover_image,
-						silent: true
-					});
-					notif.onclick = () => {};
-					*/
 					swal({
 						title: "Download has begun",
 						text: "Successfully began download.",
@@ -805,101 +820,6 @@ $(function () {
 			});
 		}
 	}, false);
-	
-	// Listen for quality selection.
-	/*
-	ipc.on('quality_select', (event, msg) => {
-		// Start loading indicator
-		$('.loader').show();
-		
-		// Close modal window
-		var chosen_url = msg;
-		child.close();
-		++win_id;
-	
-		// Select appropriate url
-		var download_uri = null;
-		var selected = currentItem.sources.filter((x) => x.url === chosen_url)[0];
-		download_uri = selected.url;
-		console.log(selected);
-	
-		// Pass off to video player
-		if(download_uri === null) console.error("Could not select download URI!");
-		let win = new electron.remote.BrowserWindow({
-			title: currentItem.title,
-			modal: false,
-			show: false
-		})
-	
-		win.loadURL(url.format({
-			pathname: path.join(__dirname, 'video.html'),
-			protocol: 'file:',
-			slashes: true
-		}))
-
-		// Send video info when page is ready
-		win.webContents.on('did-finish-load', () => {
-			win.webContents.send('video', [currentItem, download_uri, win_id]);
-			//win.show(); //
-			player_windows.push(win);
-		});
-		
-		ipc.on('max-' + win_id, (evt, msg) => {
-			console.log("Received window max request.");
-			//win.maximize();
-			//win.setFullScreen(true);
-		});
-		
-		ipc.on('started-' + win_id, (evt, msg) => {
-			$('.loader').hide();
-		});
-
-		// Open the DevTools if needed.
-		//win.webContents.openDevTools(); win.show();
-
-		// Emitted when the window is closed.
-		win.on('close', function () {
-			// Free window object
-			player_windows.splice(player_windows.indexOf(win), 1);
-			win = null;
-		});
-	});
-	*/
-	
-	// Handle IPC data events.
-	/*
-	ipc.on('tv_show_info', async function(event, imdb_code) {
-		var video_obj = await metadata.getTraktItemById(imdb_code);
-		console.log("TV show event:", event);
-		video_obj = video_obj.show;
-		console.log(video_obj);
-		if(video_obj){
-			video_obj = await trakt.seasons.summary({
-				id: imdb_code,
-				extended: "full"
-			});
-		}
-		console.log("seasons:", video_obj);
-		ipc.send('reply', {
-			type: "tv_show_info",
-			data: video_obj
-		});
-	});
-	ipc.on('search_tv_episode', async function(event, data) {
-		var imdb_code = data.imdb_code;
-		var season = data.season, episode = data.episode;
-		var item = metadata.getItemById(imdb_code);
-		var results = await search.findSourcesByItem(item, {
-			season: season,
-			episode: episode
-		});
-		console.log("Found TV episode sources:", results);
-		ipc.send('reply', {
-			type: "search_tv_episode",
-			data: results
-		});
-	});
-	*/
 	
 	// Handle search form submission.
 	$('#search-form').submit((e) => {
