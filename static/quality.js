@@ -99,7 +99,7 @@ function renderOptions(event, item){
 						value: "cloud"
 					}
 				},
-				icon: "info"
+				icon: item.cover_image
 			}).then((value) => {
 				if(value === "cloud"){
 					window.parent.postMessage(JSON.stringify({

@@ -220,7 +220,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	
 	// Cache result
 	parsed_bytes, ok := GetBytes(parsed)
-	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*1 hour=*/1 * 60 * 60)
+	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*24 hours=*/24 * 60 * 60)
 	
 	// Return gathered data
 	return parsed, err
