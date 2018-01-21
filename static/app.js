@@ -5,7 +5,7 @@
 	var decode = function (str) {return decodeURIComponent( str.replace(decodeRE, " ") );};
 	$.parseParams = function(query) {
 		var params = {}, e;
-		while ( e = re.exec(query) ) { 
+		while ( e = re.exec(query) ) {
 			var k = decode( e[1] ), v = decode( e[2] );
 			if (k.substring(k.length - 2) === '[]') {
 				k = k.substring(0, k.length - 2);
@@ -15,14 +15,13 @@
 		}
 		return params;
 	};
-    
+
     // from https://codepen.io/filippoq/pen/QwogWz/
     $.fn.bmdIframe = function() {
-        // se si chiude la modale resettiamo i dati dell'iframe per impedire ad un video di continuare a riprodursi anche quando la modale è chiusa
         this.on('hidden.bs.modal', function(){
           $(this).find('iframe').html("").attr("src", "");
         });
-      
+
         return this;
     };
 })();
@@ -473,7 +472,7 @@ $(function () {
 			"height": 640,
 			"width": 360
 		}, opts);
-		
+
 		var iframe = $('#frameModal').find("iframe");
 		iframe.attr("src", opts.path);
 		/*
@@ -482,9 +481,9 @@ $(function () {
 			"width": opts.width
 		});
 		*/
-		
+
 		if(opts.allowFullScreen) iframe.attr("allowfullscreen", "");
-		
+
 		$('#frameModal').modal('show');
 	};
 	var sendFrameMessage = function(obj) {
@@ -533,7 +532,7 @@ $(function () {
 			hash = arr[0];
 		}
 		console.log(hash, params);
-		
+
 		// Handle event.
 		if(hash === "watch"){
 			var imdb_id = params.id;
@@ -542,10 +541,10 @@ $(function () {
 				console.log(on);
 				$('.loader').hide();
 				currentItem = on;
-				
+
 				// Fill in playback and/or history information for current item.
 				currentItem.playback_progress = undefined/*history.getPlaybackProgressForMovie(imdb_id)*/; // TODO
-				
+
 				// Initialize frame.
 				openPage({
 					"path": "/static/quality.html",
@@ -617,7 +616,7 @@ $(function () {
 			$('#downloads').hide();
 			$('.quota-bars').hide();
 			customRefreshTitle = "Retrived watchlist";
-			customRefreshMessage = "Successfully retrieved watchlist from server.";
+			customRefreshMessage = "Successfully retrieved watchlist.";
 			customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
@@ -626,7 +625,7 @@ $(function () {
 			$('#downloads').hide();
 			$('.quota-bars').hide();
 			customRefreshTitle = "Retrived history";
-			customRefreshMessage = "Successfully retrieved history from server.";
+			customRefreshMessage = "Successfully retrieved history.";
 			customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => getWatched(), /*limit=*/12 * 1);
@@ -820,7 +819,7 @@ $(function () {
 			});
 		}
 	}, false);
-	
+
 	// Handle search form submission.
 	$('#search-form').submit((e) => {
 		e.preventDefault();
