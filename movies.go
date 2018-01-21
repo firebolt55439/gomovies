@@ -566,6 +566,9 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	/* Retrieve matches */
 	if imdb_id, ok := opts["id"].(string); ok {
 		sources[imdb_id], err = SearchSourcesParallel(opts)
+
+		/* Cache sources only if searching for an item directly */
+		cacheSources(sources)
 	} else if keyword, ok := opts["keyword"].(string); ok {
 		/* Search Trakt.tv */
 		tmp, err = searchTraktMovies(keyword, "movie")
@@ -583,9 +586,6 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 			sources[elem.ImdbCode] = append(sources[elem.ImdbCode], elem)
 		}
 	}
-	
-	/* Cache sources */
-	cacheSources(sources)
 	
 	/* Add ID's from sources */
 	for _, sourceItems := range sources {

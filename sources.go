@@ -56,6 +56,16 @@ type SourceB struct {
 	SourceApiHostname string `mapstructure:"hostname"`
 }
 
+type SourceC struct {
+	BaseUrl string `mapstructure:"base_url"`
+	SourceLocation string `mapstructure:"source_location"`
+	SourceApiSourceKey string `mapstructure:"source_key"`
+	SourceApiClientKey string `mapstructure:"client_key"`
+	SourceApiHostname string `mapstructure:"hostname"`
+	UriStart string `mapstructure:"uri_start"`
+	UriTr []interface{} `mapstructure:"uri_tr"`
+}
+
 var sourceApiStorage SourceApiStorage
 
 func getTokenIfNecessary(configuration SourceA) (string, error) {
@@ -376,6 +386,98 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			})
 		}
 		
+		return ret, err
+	},
+
+	func (opts map[string]interface{}, conf SourceConfig) (ret []ItemSource, err error) {
+		var configuration SourceC
+		if err := mapstructure.Decode(conf, &configuration); err != nil {
+			return nil, err
+		}
+		ret = make([]ItemSource, 0)
+		
+		/* Generate url */
+		search_term := ""
+		if imdb_id, ok := opts["id"].(string); ok {
+			search_term = imdb_id
+		} else if _, ok := opts["keyword"].(string); ok {
+			return nil, errors.New("Keyword search is not supported by this source")
+		}
+		
+		form_url := fmt.Sprintf(
+			"%s?query_term=%s",
+			configuration.BaseUrl,
+			search_term,
+		)
+		fmt.Println(form_url)
+
+		/* Download page */
+		var resp (*http.Response)
+		for ct := 0;; ct += 1 {
+			resp, err = netClient.Get(form_url)
+			if err != nil {
+				if ct > 5 {
+					return nil, err
+				}
+				continue
+			}
+			break
+		}
+		bytes, _ := ioutil.ReadAll(resp.Body)
+		body := string(bytes)
+
+		var got map[string]interface{}
+		var rows []interface{}
+		json.Unmarshal([]byte(body), &got)
+
+		/* Parse search results */
+		var ok bool
+		got, ok = got["data"].(map[string]interface{})
+		if !ok {
+			return nil, err
+		}
+		rows, ok = got["movies"].([]interface{})
+		if !ok {
+			return nil, err
+		}
+
+		var matched map[string]interface{}
+		for _, on := range rows {
+			if cur, ok := on.(map[string]interface{}); ok && cur["imdb_code"].(string) == search_term {
+				matched = cur
+				break
+			}
+		}
+		if matched == nil {
+			// No match found
+			return ret, err
+		}
+
+		rows = matched[configuration.SourceLocation].([]interface{})
+
+		for _, cur := range rows {
+			on, ok := cur.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			var uri string
+			uri = configuration.UriStart
+			uri += on["hash"].(string)
+			uri += "&dn=" + url.PathEscape(matched["title"].(string))
+
+			ret = append(ret, ItemSource{
+				ImdbCode: search_term,
+				Quality: on["quality"].(string),
+				Size: bytesToSize(on["size_bytes"].(float64)),
+				Filename: matched["title"].(string),
+				Url: uri,
+				SourceCount: int(on[configuration.SourceApiSourceKey].(float64)),
+				ClientCount: int(on[configuration.SourceApiClientKey].(float64)),
+				SourceHostname: configuration.SourceApiHostname,
+			})
+		}
+
 		return ret, err
 	},
 }
