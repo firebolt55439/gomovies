@@ -155,6 +155,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 		
 		/* Continue retrying request up to threshold */
 		target_url := fmt.Sprintf("%s?%s", configuration.SourceApiBaseUrl, searchParams.Encode())
+		fmt.Println(target_url);
 		var results []map[string]interface{}
 		
 		for attempt := 1; attempt <= 5; attempt += 1{
@@ -304,15 +305,9 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 		
 		/* Download page */
 		var resp (*http.Response)
-		for ct := 0;; ct += 1 {
-			resp, err = netClient.Get(form_url)
-			if err != nil {
-				if ct > 5 {
-					return nil, err
-				}
-				continue
-			}
-			break
+		resp, err = netClient.Get(form_url) // retries are baked in
+		if err != nil {
+			return ret, err
 		}
 		bytes, _ := ioutil.ReadAll(resp.Body)
 		body := string(bytes)
@@ -494,7 +489,8 @@ func SearchSourcesParallel(opts map[string]interface{}) (ret []ItemSource, err e
     /* Search sources in parallel */
     source_idx := 0
     for _, fn := range sources {
-    	go func(fn func(map[string]interface{}, SourceConfig) ([]ItemSource, error), conf SourceConfig) {
+    	go func(fn func(map[string]interface{}, SourceConfig) ([]ItemSource, error), conf SourceConfig, source_idx int) {
+    		fmt.Println("Searching host:", source_idx)
     		res, ok := fn(opts, conf)
     		if ok != nil {
     			fmt.Println("Warning:", ok)
@@ -502,7 +498,8 @@ func SearchSourcesParallel(opts map[string]interface{}) (ret []ItemSource, err e
     		} else {
     			parsed <- res
     		}
-    	} (fn, configuration.Sources[source_idx])
+    		fmt.Println("Done searching host:", source_idx)
+    	} (fn, configuration.Sources[source_idx], source_idx)
     	source_idx += 1
     }
 

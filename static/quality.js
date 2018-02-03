@@ -22,14 +22,16 @@ function renderOptions(event, item){
 		var sort_order = {
 			"4K": 1,
 			"3D": 2,
-			"HD": 3,
-			"1080p": 4,
-			"720p": 5,
-			"SD": 6
+			"2160p": 3,
+			"HD": 4,
+			"1080p": 5,
+			"720p": 6,
+			"SD": 7
 		}
 		var by_quality = Object.keys(sort_order).map(x => []);
 		for(var on of sources){
 			var idx = sort_order[on.quality] - 1;
+			if(idx === undefined || (!idx && idx != 0)) idx = sort_order["SD"] - 1;
 			by_quality[idx].push(on);
 		}
 		by_quality = by_quality.map((arr) => {
