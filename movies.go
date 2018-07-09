@@ -213,6 +213,10 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	summary = strings.TrimSpace(summary)
 	summary = html.UnescapeString(summary)
 	parsed["summary"] = summary
+
+	if len(summmary) == 0 {
+		fmt.Println("ZERO SUM LENGTH (%s)!", id)
+	}
 	
 	// TV Show Detection
 	is_tv_show := strings.Index(mpaa_rating, "TV") != -1

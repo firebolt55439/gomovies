@@ -68,14 +68,12 @@ nav.navbar {
 }
 #grid li {
     display: inline-block;
-    *display:inline;/*for IE6 - IE7*/
-    width:25%;
     vertical-align:middle;
     box-sizing:border-box;
     margin:0;
     padding:0;
 }
-        
+
 /* The wrapper for each item */
 .grid-cell {
     /*margin:12px;
@@ -83,14 +81,15 @@ nav.navbar {
     display:block;
     position: relative;
     overflow:hidden;
+    border: none;
 }
-        
+
 /* If have the image layer */
 .grid-img {
     display:block;
     width: 100%;
     height: auto;
-    border:none;
+    border: none;
     transform:scale(1);
     transition:all 1s;
 }
@@ -98,7 +97,7 @@ nav.navbar {
 #grid li:hover .grid-img {
     transform:scale(1.05);
 }
-        
+
 /* If have the overlay layer */
 .grid-overlay {
     position: absolute;
@@ -106,7 +105,6 @@ nav.navbar {
     top: 0;
     left: 0;
     bottom: 0;
-    gridht: 0;
     margin: auto;
     /*background: #3DC0F1 url(img/link.png) no-repeat center 20%;*/
     background-size:50px 50px;
@@ -118,6 +116,8 @@ nav.navbar {
     opacity:0.8;
 }
 .grid-button-right {
+  display: block;
+  box-sizing:border-box;
 	opacity: 0;
 	z-index: 10;
 	position: absolute;
@@ -127,11 +127,11 @@ nav.navbar {
 	margin-right: -10%;
 }
 #grid li:hover .grid-button-right {
-	display: block;
-	box-sizing:border-box;
 	opacity: 1.0;
 }
 .grid-button-left {
+  display: block;
+  box-sizing:border-box;
 	opacity: 0;
 	z-index: 10;
 	position: absolute;
@@ -140,11 +140,11 @@ nav.navbar {
 	top: 5%;
 }
 #grid li:hover .grid-button-left {
-	display: block;
-	box-sizing:border-box;
 	opacity: 1.0;
 }
 .grid-button-bottom-left {
+  display: block;
+  box-sizing:border-box;
 	opacity: 0;
 	z-index: 10;
 	position: absolute;
@@ -153,11 +153,11 @@ nav.navbar {
 	bottom: 5%;
 }
 #grid li:hover .grid-button-bottom-left {
-	display: block;
-	box-sizing:border-box;
 	opacity: 1.0;
 }
 .grid-button-bottom-right {
+  display: block;
+  box-sizing:border-box;
 	opacity: 0;
 	z-index: 10;
 	position: absolute;
@@ -167,15 +167,12 @@ nav.navbar {
 	margin-right: -10%;
 }
 #grid li:hover .grid-button-bottom-right {
-	display: block;
-	box-sizing:border-box;
 	opacity: 1.0;
 }
 
 /* If have captions */
 .grid-text {
     display:block;
-    padding:0 30px;
     box-sizing:border-box;
     position:absolute;
     left:0;
@@ -189,9 +186,14 @@ nav.navbar {
     top:40%;
     color:white;
     opacity:0;
-    filter:alpha(opacity=0);/*For older IE*/
     transform:translateY(-20px);
     transition:all 0.3s;
+}
+#grid li > * {
+  /*-webkit-backface-visibility: hidden;*/
+  /*-webkit-perspective: 1000;*/
+  /*-webkit-transform-style: preserve-3d;*/
+  /*-webkit-transform: translateZ(0);*/
 }
 #grid li:hover .grid-text {
     transform:translateY(0px);
@@ -201,6 +203,11 @@ nav.navbar {
 #grid li:hover img {
 	filter: blur(2px) brightness(40%) contrast(70%);
 }
+
+#grid li {
+  width: auto;
+}
+
 
 @media (max-width: 100000px) {
     #grid li {
@@ -264,7 +271,7 @@ input::-webkit-search-cancel-button {
 /* Carousel styling */
 
 div.carousel {
-  background-color: #99AABB;
+  background-color: #334455;
 }
 
 /* Loader styling */
