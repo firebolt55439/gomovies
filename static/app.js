@@ -127,7 +127,18 @@ function getWatched() {
 	return new Promise((resolve, reject) => {
 		apiReq("getHistory", {
 		}, function(data) {
-			resolve(data.watched);
+			if(data && data.watched){
+				resolve(data.watched);
+			} else {
+				swal({
+					title: "Trakt Token",
+					text: "Trakt API token is outdated.",
+					icon: "warning",
+					timer: 2500,
+					buttons: false
+				});
+				resolve([]);
+			}
 		});
 	});
 }
@@ -405,13 +416,15 @@ $(function () {
 			$('.loader').hide();
 
 			// Inform user of success
-			swal({
-				title: (customRefreshTitle || "Refreshed Content"),
-				text: (customRefreshMessage || "Reloaded items from server."),
-				icon: "success",
-				buttons: false,
-				timer: customRefreshTimer
-			});
+			if(customRefreshTitle || customRefreshMessage){
+				swal({
+					title: (customRefreshTitle || "Refreshed Content"),
+					text: (customRefreshMessage || "Reloaded items from server."),
+					icon: "success",
+					buttons: false,
+					timer: customRefreshTimer
+				});
+			}
 			customRefreshTitle = customRefreshMessage = undefined;
 			customRefreshTimer = 2000;
 		});
@@ -423,9 +436,10 @@ $(function () {
 	refreshHistoryWatchlist().then(() => {
 		refreshHistoryWatched().then(() => {
 			$('.loader').hide();
-			customRefreshTitle = "Initialized catalog";
-			customRefreshMessage = "Successfully initialized server catalog.";
+			// customRefreshTitle = "Initialized catalog";
+			// customRefreshMessage = "Successfully initialized server catalog.";
 			refreshHomepage();
+			$(document.body).removeClass("loading");
 		});
 	});
 	
@@ -615,7 +629,7 @@ $(function () {
 		} else if(hash === "view_watchlist"){
 			$('#downloads').hide();
 			$('.quota-bars').hide();
-			customRefreshTitle = "Retrived watchlist";
+			customRefreshTitle = "Retrieved watchlist";
 			customRefreshMessage = "Successfully retrieved watchlist.";
 			customRefreshTimer = 1000;
 			setTimeout(() => {
@@ -624,7 +638,7 @@ $(function () {
 		} else if(hash === "view_history"){
 			$('#downloads').hide();
 			$('.quota-bars').hide();
-			customRefreshTitle = "Retrived history";
+			customRefreshTitle = "Retrieved history";
 			customRefreshMessage = "Successfully retrieved history.";
 			customRefreshTimer = 1000;
 			setTimeout(() => {

@@ -27,7 +27,7 @@ function renderOptions(event, item){
 			"1080p": 5,
 			"720p": 6,
 			"SD": 7
-		}
+		};
 		var by_quality = Object.keys(sort_order).map(x => []);
 		for(var on of sources){
 			var idx = sort_order[on.quality] - 1;
