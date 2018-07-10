@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"sort"
 	"math"
+	"math/rand"
 	"runtime"
 	
 	"github.com/coocood/freecache"
@@ -24,6 +25,7 @@ import (
 type MovieData interface {
 	/* IMDB metadata resolution */
 	ScrapeImdb(id string) (map[string]interface{}, error)
+	ResolveImdb(id string) (map[string]interface{}, error)
 	ResolveParallel(ids []string, load_balancer_addr string) ([]map[string]interface{}, error)
 	
 	/* Trakt.tv and taste.io integration */
@@ -214,7 +216,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	summary = html.UnescapeString(summary)
 	parsed["summary"] = summary
 
-	if len(summmary) == 0 {
+	if len(summary) == 0 {
 		fmt.Println("ZERO SUM LENGTH (%s)!", id)
 	}
 	
@@ -226,6 +228,101 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	parsed_bytes, ok := GetBytes(parsed)
 	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*24 hours=*/24 * 60 * 60)
 	
+	// Return gathered data
+	return parsed, err
+}
+
+func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err error) {
+	defer func() {
+        if r := recover(); r != nil {
+            err = errors.New(fmt.Sprintf("ResolveImdb was panicking, recovered value: %v (%s)", r, identifyPanic()))
+        }
+    }()
+    parsed = make(map[string]interface{})
+    err = nil
+    
+    // Check cache
+    cached, ok := cache.Get([]byte(IMDB_KEY_ID + id))
+    if ok == nil && cached != nil {
+    	buf := bytes.NewBuffer(cached)
+    	dec := gob.NewDecoder(buf)
+    	v := dec.Decode(&parsed)
+    	if v != nil {
+    		panic(v)
+    	}
+    	return parsed, err
+    }
+	
+	// Download IMDB url
+	rand.Seed(time.Now().UnixNano())
+	parsed["imdb_code"] = id
+	api_key := configuration.OmdbApiKeys[rand.Intn(len(configuration.OmdbApiKeys) - 1)]
+	imdb_url := fmt.Sprintf("http://www.omdbapi.com/?i=%s&apikey=%s", id, api_key)
+	var resp (*http.Response)
+	for ct := 0;; ct += 1 {
+		resp, err = netClient.Get(imdb_url)
+		if err != nil {
+			if ct > 5 {
+				return nil, err
+			}
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		break
+	}
+	bytes, _ := ioutil.ReadAll(resp.Body)
+	body := string(bytes)
+	//fmt.Println(body[0:200])
+	resp.Body.Close()
+
+	// fmt.Printf("URL: %s", imdb_url)
+
+	// Parse JSON if possible
+	var body_json map[string]interface{}
+	if err = json.Unmarshal([]byte(body), &body_json); err != nil {
+		parsed["unreleased"] = true
+		return parsed, err
+	}
+
+	// Parse score and check if unreleased (unreleased if no score available)
+	rating, _ := body_json["imdbRating"].(string)
+	if rating == "N/A" {
+		parsed["unreleased"] = true
+		return parsed, err
+	}
+	rating_int, ok := strconv.ParseFloat(rating, /*bitsize=*/64)
+	parsed["imdb_rating"] = rating_int
+
+	// Vote count
+	rating_count, _ := body_json["imdbVotes"].(string)
+	rating_count = strings.Replace(rating_count, ",", "", -1)
+	parsed["imdb_rating_count"], _ = strconv.Atoi(rating_count)
+
+	// Poster image
+	parsed["cover_image"], _ = body_json["Poster"].(string)
+
+	// Year
+	year, _ := strconv.Atoi(body_json["Year"].(string))
+	parsed["year"] = year
+
+	// Title
+	title := body_json["Title"].(string)
+	parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
+
+	// MPAA Rating
+	parsed["mpaa_rating"] = body_json["Rated"].(string)
+
+	// Summary
+	parsed["summary"] = body_json["Plot"].(string)
+
+	// TV Show Detection
+	media_type := body_json["Type"].(string)
+	parsed["is_tv_show"] = media_type == "series"
+
+	// Cache result
+	parsed_bytes, ok := GetBytes(parsed)
+	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*24 hours=*/24 * 60 * 60)
+
 	// Return gathered data
 	return parsed, err
 }

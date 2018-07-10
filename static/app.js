@@ -257,7 +257,7 @@ $(function () {
 	
 	// Function to generate markup for movie poster item in grid.
 	var retrieveCoverMarkup = function(on) {
-		var li = $('<li></li>');
+		var li = $('<li class="grid-item"></li>');
 		var new_hash = '#watch?' + $.param({
 			"title": on.title,
 			"id": on.imdb_code
@@ -307,7 +307,7 @@ $(function () {
 		return li;
 	};
 	var retrieveBlankCoverMarkup = function() {
-		var li = $('<li></li>');
+		var li = $('<li class="grid-item grid-item-blank"></li>');
 		var anc = $('<a class="grid-cell" href="#"></a>');
 		anc.append('<img class="grid-img" />');
 		anc.append('<span class="grid-overlay"></span>');
@@ -315,6 +315,37 @@ $(function () {
 		li.append(anc);
 		return li;
 	};
+
+	var resizeAllGridItems = function(){
+		// console.log("Handling resize...");
+		var grid = document.getElementById("grid");
+		var allItems = Array.from(document.getElementsByClassName("grid-item"));
+		if(allItems
+			.filter(x => Array.from(document.getElementsByClassName("grid-item-blank")).indexOf(x) === -1)
+			.map(x => x.clientHeight)
+			.filter(x => x == 0)
+			.length > 0
+		){
+			return setTimeout(resizeAllGridItems, 300);
+		}
+		var rowNumElements = Math.round($(window).width() / $(allItems[0]).width());
+		for(var i = 0; i < allItems.length; i += rowNumElements){
+			var slice = allItems.slice(i, i + rowNumElements);
+			var heights = slice.map(x => x.offsetHeight).filter(x => x > 0);
+			console.log(heights);
+			var minHeight = Math.min(...heights);
+			console.log(minHeight);
+			for(var j = 0; j < slice.length; j++){
+				$(slice[j].querySelector(".grid-img")).height(minHeight);
+			}
+		}
+	};
+	var resizeWhenLoaded = function() {
+		imagesLoaded( document.querySelector('.grid-item'), function( instance ) {
+			resizeAllGridItems();
+		});
+	};
+	window.addEventListener("resize", resizeAllGridItems);
 	/*
 	apiReq("resolveParallel", {
 		"ids": ["tt0108052", "tt1408101", "tt0075860", "tt0120815", "tt0264464"]
@@ -380,7 +411,7 @@ $(function () {
 				//console.log(cur, highlighted);
 				var img_div = $('<div class="item active"></div>');
 				if(i > 0) img_div.removeClass("active");
-				img_div.append($('<img src="' + cur.cover_image + '" alt="' + cur.title + '" />'));
+				img_div.append($('<img class="carousel_img" src="' + cur.cover_image + '" alt="' + cur.title + '" />'));
 				var cap = $('<div class="carousel-caption"></div>');
 				cap.append($('<div class="carousel-title"><h3 style="font-size: 2vw;">' + cur.title + ' [' + (cur.mpaa_rating || "NR") + ']</h3></div>'));
 				cap.append($(retrieveRatingMarkup(cur.imdb_rating * 10.0)));
@@ -414,6 +445,7 @@ $(function () {
 				$('#grid').append(li);
 			}
 			$('.loader').hide();
+			resizeWhenLoaded();
 
 			// Inform user of success
 			if(customRefreshTitle || customRefreshMessage){
@@ -442,7 +474,7 @@ $(function () {
 			$(document.body).removeClass("loading");
 		});
 	});
-	
+
 	// Detect when user has hit bottom of scrollable view and populate with new movies.
 	document.addEventListener('scroll', function (event) {
 		//console.log($(window).scrollTop() + $(window).height(), $(document).height());
@@ -462,6 +494,7 @@ $(function () {
 						$('#grid').append(li);
 					}
 					$('.loader').hide();
+					resizeWhenLoaded();
 					enableScroll();
 
 					// Inform user.

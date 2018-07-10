@@ -59,16 +59,15 @@ nav.navbar {
 /* Grid styling */
 
 #grid {
-    /*max-width:900px;*/
-    margin:0 auto; /*center aligned*/
+    margin:0 auto;
     padding:0;
-    font-size:0; /* Remember to change it back to normal font size if have captions */
+    font-size:0;
     list-style:none;
     background-color:rgba(0,0,0,0.0);
 }
 #grid li {
     display: inline-block;
-    vertical-align:middle;
+    vertical-align: top;
     box-sizing:border-box;
     margin:0;
     padding:0;
@@ -88,7 +87,6 @@ nav.navbar {
 .grid-img {
     display:block;
     width: 100%;
-    height: auto;
     border: none;
     transform:scale(1);
     transition:all 1s;
@@ -242,6 +240,7 @@ nav.navbar {
 @media (max-width: 550px) {
     #grid li {
         width:50%;
+        height: 100%;
     }
 }
 
@@ -272,6 +271,10 @@ input::-webkit-search-cancel-button {
 
 div.carousel {
   background-color: #334455;
+}
+
+.carousel_img {
+  max-width: 200px !important;
 }
 
 /* Loader styling */

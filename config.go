@@ -27,6 +27,8 @@ type Configuration struct {
 	OauthDownloadingPath string `json:"oauth_downloading_path"`
 	
 	TitleQualityHDKeywords []string `mapstructure:"hd_titles"`
+
+	OmdbApiKeys []string `json:"omdbapi_keys"`
 	
 	Sources []SourceConfig `json:"sources"`
 }

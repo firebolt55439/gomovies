@@ -51,7 +51,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			if !ok {
 				return nil, errors.New("Invalid IMDB id")
 			}
-			data, err := movieWorker.ScrapeImdb(imdb_id)
+			data, err := movieWorker.ResolveImdb(imdb_id)
 			return data, err
 		case "resolveParallel":
 			// Takes {"ids": [...]}
