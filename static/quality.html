@@ -4,34 +4,44 @@
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Item Details</title>
-		
+
 		<!-- CSS -->
 		<link rel="stylesheet" href="/static/style.css">
 		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-		
+
 		<!-- JS -->
 		<script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 		<script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
 	</head>
-	<body>
+	<body class="quality_body">
 		<div id="options_container">
 			<div class="container">
 				<div class="row">
-					<div class="col-sm-6 col-md-4" style="background-color:rgba(0,0,0,0);">
-						<img id="cover-img" src="" style="width: 200px; max-width: 100%;"></img>
+					<div class="col-sm-6 col-md-4" style="background-color:rgba(0,0,0,0); margin-top: 2.5%;">
+						<img id="cover-img" src="" style="width: 300px; max-width: 100%; margin-left: 10px;"></img>
 					</div>
-					<div class="col-sm-6 col-md-4" style="text-align: justify;">
-						<div style="text-align: center; margin-top: 5%;"><h3 id="video-title"></h3></div>
-						<p id="summary-text"></p>
-						<br />
-						<p>MPAA Rating: <b id="mpaa-rating"></b></p>
-						<br />
+					<div class="col-sm-6 col-md-4" style="text-align: justify; margin-top: 2%;">
+						<div style="text-align: center;"><h3 id="video-title" style="display: inline;"></h3>&nbsp;&nbsp;&nbsp;<p id="mpaa-rating" class="rating-box"></p></div>
+						<p id="summary-text" style="margin-top: 5px;"></p>
+						<p>Genres: <b id="genres"></b></p>
+						<p>Runtime: <b id="runtime"></b></p>
+						<p id="cast_p">Cast: <b id="cast"></b></p>
+						<p id="awards_p">Awards: <b id="awards"></b></p>
+						<b id="imdb-rating-count"></b> IMDb reviews
+						<br /><br />
 						<div class="progress">
 							<div class="imdb-rating progress-bar progress-bar-warning" style="width: 60%; min-width: 10%; color: blue;">
 							</div>
 						</div>
-						from <span id="imdb-rating-count"></span> reviewers <br />
+						<div class="progress">
+							<div class="rt-rating progress-bar progress-bar-danger" style="width: 60%; min-width: 10%; color: blue;">
+							</div>
+						</div>
+						<div class="progress">
+							<div class="metacritic-rating progress-bar progress-bar-success" style="width: 60%; min-width: 10%; color: blue;">
+							</div>
+						</div>
 					</div>
 				</div>
 			</div><br />

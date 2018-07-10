@@ -1,9 +1,22 @@
 /* Body styling */
 
 body {
-	background: linear-gradient(to right, #AABBCC, #DDEEFF) !important;
+	background: linear-gradient(to right, #AABBCC, #DDEEFF);
 	margin:0; padding:0; box-sizing:border-box;
 	width: 100%; height: 100%;
+}
+
+body.quality_body {
+  background: linear-gradient(to right, #223344, #445566) !important;
+}
+
+body.quality_body::-webkit-scrollbar-thumb {
+  background-color: #000000;
+}
+
+body.quality_body::-webkit-scrollbar-track {
+    -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
+    background-color: #F5F5F5;
 }
 
 /* Navbar styling */
@@ -13,12 +26,15 @@ nav.navbar {
   border: 0px;
 }
 
+a.navbar-brand {
+  pointer-events: none;
+}
+
 /* Quality styling */
 
 #cover-img {
 	display: block;
-	margin-left: 20%;
-	margin-right: 20%;
+  margin: 0 auto;
 }
 
 /* Options styling */
@@ -276,6 +292,15 @@ div.carousel {
   max-width: 200px !important;
 }
 
+.rating-box {
+  display: inline;
+  border: 2px solid white;
+  padding: 3px;
+  font-size: 0.9em;
+  position:relative;
+  top: -2px;
+}
+
 /* Loader styling */
 
 .loader,
@@ -498,8 +523,8 @@ div.tooltip-inner {
 .modal-lg {
 	margin-top: 30px;
 	width: 800px;
-	height: 650px;
-	margin-left: -100px;
+	height: 93vh;
+	margin-left: -10vw;
 	background-color: rgba(255, 255, 255, 0.2) !important;
 }
 

@@ -32,7 +32,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 		return nil, ErrEmpty
 	}
 	movieWorker := movieData{}
-	
+
 	// Handle request by type
 	req_type := s["type"]
 	req_data, ok := s["data"].(map[string]interface{})
@@ -105,7 +105,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			if !ok {
 				return nil, errors.New("Parameter `uri` is required")
 			}
-			
+
 			/* Execute request */
 			payload := map[string]interface{}{
 				configuration.DownloadUriOauthParam: uri,
@@ -114,7 +114,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			if err != nil {
 				return nil, err
 			}
-			
+
 			/* If not enough space, clear main folder and try again */
 			if result, ok := outp["result"].(string); ok &&
 			(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
@@ -123,7 +123,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				if err != nil {
 					return nil, err
 				}
-				
+
 				/* Get all ID's from main folder. */
 				var list []interface{}
 				list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
@@ -136,7 +136,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 					return nil, errors.New("Could not retrieve ID's from folders path")
 				}
 				list = append(list, list_tmp...)
-				
+
 				/* Clear out main folder */
 				fmt.Println("folders:", list)
 				for _, item := range list {
@@ -145,12 +145,12 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 						return nil, errors.New("Could not convert folder item")
 					}
 					current_id, ok := conv_item["id"].(float64)
-					
+
 					delete_type := "folder"
 					if _, ok = conv_item["progress_url"].(string); ok {
 						delete_type = strings.TrimSuffix(configuration.OauthDownloadingPath, "s")
 					}
-					
+
 					_, err := oAuth.Query("delete", map[string]interface{}{
 						"delete_arr": "[{\"type\": \"" + delete_type + "\", \"id\": \"" + fmt.Sprintf("%.0f", current_id) + "\"}]",
 					})
@@ -158,7 +158,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 						return nil, err
 					}
 				}
-				
+
 				/* Retry request */
 				time.Sleep(1 * time.Second)
 				outp, err = oAuth.Query(configuration.DownloadUriOauth, payload)
@@ -169,12 +169,16 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			}
 			return outp, err
 		case "getDownloads":
+			// TODO: Start keeping track of IMDB id's along with downloads and other metadata
+			// metadata: start time of download, IMDB id
+			// TODO: Check if in iCloud drive or not
+			// TODO: Allow downloading in background
 			/* Retrieve main folder */
 			res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
 			if err != nil {
 				return nil, err
 			}
-			
+
 			/* Get all folders in main folder. */
 			var list []interface{}
 			list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
@@ -187,7 +191,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				return nil, errors.New("Could not retrieve ID's from folders path")
 			}
 			list = append(list, list_tmp...)
-			
+
 			/* Return in desired format. */
 			return map[string]interface{}{
 				"downloads": list,
@@ -283,7 +287,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			"took", time.Since(begin),
 		)
 	}(time.Now())
-	
+
 	if pusher, ok := w.(http.Pusher); ok {
 		if err := pusher.Push("/static/app.js", nil); err != nil {
 			logger.Log("Failed to push: %v", err)
@@ -292,7 +296,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			logger.Log("Failed to push: %v", err)
 		}
 	}
-	
+
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	data, err := ioutil.ReadFile("static/index.html")

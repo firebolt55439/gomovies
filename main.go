@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"encoding/json"
 	"time"
-	
+
 	"github.com/42minutes/go-trakt"
 
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
@@ -36,7 +36,7 @@ func main() {
 		proxy  = flag.String("proxy", "", "Optional comma-separated list of URLs to proxy movies requests")
 	)
 	flag.Parse()
-	
+
 	/* Parse configuration file */
 	__file, _ := os.Open("config.json")
 	__decoder := json.NewDecoder(__file)
@@ -47,12 +47,12 @@ func main() {
 	}/* else {
 		fmt.Println(configuration)
 	}*/
-	
+
 	/* Initialize client */
 	netClient.Timeout = time.Duration(configuration.ClientTimeoutSeconds) * time.Second
 	netClient.MaxRetries = configuration.ClientMaxRetries
 	netClient.Concurrency = configuration.ClientConcurrency
-	
+
 	/* Initialize OAuth */
 	oAuth = OAuth{
 		username: configuration.Username,
@@ -70,7 +70,7 @@ func main() {
 		trakt.TokenAuth{AccessToken: configuration.TraktAccessToken},
 		nil,
 	)
-	
+
 	/* Initialize microservices */
 	logger = log.NewLogfmtLogger(os.Stderr)
 	logger = log.With(logger, "listen", *listen, "caller", log.DefaultCaller)
@@ -112,7 +112,7 @@ func main() {
 		decodeCountRequest,
 		encodeResponse,
 	)
-	
+
 	http.HandleFunc("/", rootHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", maxAgeHandler(0, http.FileServer(http.Dir("static")))))
 	http.Handle("/movies", moviesHandler)

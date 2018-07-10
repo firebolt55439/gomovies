@@ -14,8 +14,32 @@ function renderOptions(event, item){
     $('.imdb-rating').css('width', (item.imdb_rating * 10) + "%");
     $('.imdb-rating').html(item.imdb_rating + "/10 IMDb");
     $('#imdb-rating-count').html(commaSeparateNumber(item.imdb_rating_count));
-    $('#video-title').html(item.title);
-    
+    $('#video-title').text(item.title);
+    $('#runtime').text(item.runtime);
+    $('#genres').text(item.genres.join(", "));
+    if(Number.isInteger(item.rotten_tomatoes)){
+    	$('.rt-rating').css('width', item.rotten_tomatoes + "%");
+    	$('.rt-rating').html(item.rotten_tomatoes + "% RT");
+    } else {
+    	$('.rt-rating').parent().hide();
+    }
+    if(Number.isInteger(item.metacritic)){
+	    $('.metacritic-rating').css('width', item.metacritic + "%");
+	    $('.metacritic-rating').html(item.metacritic + " Metascore");
+	} else {
+		$('.metacritic-rating').parent().hide();
+	}
+	if(item.awards.length > 0){
+		$('#awards').text(item.awards);
+	} else {
+		$('#awards_p').hide();
+	}
+	if(item.cast.length > 0){
+		$('#cast').text(item.cast);
+	} else {
+		$('#cast').hide();
+	}
+
     // Fill in source selection.
     var fillInOptions = function(sources) {
     	$('#options').empty();
@@ -143,7 +167,7 @@ function renderOptions(event, item){
 				}
 			});
 		});
-	
+
 		// Initialize tooltips.
 		$('[data-toggle="tooltip"]').tooltip();
     };

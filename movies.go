@@ -16,7 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
-	
+
 	"github.com/coocood/freecache"
 	"github.com/42minutes/go-trakt"
 	"github.com/sethgrid/pester"
@@ -27,14 +27,14 @@ type MovieData interface {
 	ScrapeImdb(id string) (map[string]interface{}, error)
 	ResolveImdb(id string) (map[string]interface{}, error)
 	ResolveParallel(ids []string, load_balancer_addr string) ([]map[string]interface{}, error)
-	
+
 	/* Trakt.tv and taste.io integration */
 	GetRecommendedMovies(extension int, load_balancer_addr string) ([]map[string]interface{}, error)
 	GetWatchlist(load_balancer_addr string) ([]map[string]interface{}, error)
 	AddToWatchlist(item_type string, item_id string) (map[string]interface{}, error)
 	AddWatchHistory(item_type string, item_id string) (map[string]interface{}, error)
 	GetWatchHistory(load_balancer_addr string) ([]map[string]interface{}, error)
-	
+
 	/* Media sources */
 	SearchForItem(opts map[string]interface{}, load_balancer_addr string) ([]map[string]interface{}, error)
 	GetItem(id string, load_balancer_addr string) (map[string]interface{}, error)
@@ -77,7 +77,7 @@ func identifyPanic() string {
 	var name, file string
 	var line int
 	var pc [16]uintptr
-	
+
 	n := runtime.Callers(3, pc[:])
 	for _, pc := range pc[:n] {
 		fn := runtime.FuncForPC(pc)
@@ -90,14 +90,14 @@ func identifyPanic() string {
 			break
 		}
 	}
-	
+
 	switch {
 	case name != "":
 		return fmt.Sprintf("%v:%v", name, line)
 	case file != "":
 		return fmt.Sprintf("%v:%v", file, line)
 	}
-	
+
 	return fmt.Sprintf("pc:%x", pc)
 }
 
@@ -118,7 +118,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
     }()
     parsed = make(map[string]interface{})
     err = nil
-    
+
     // Check cache
     cached, ok := cache.Get([]byte(IMDB_KEY_ID + id))
     if ok == nil && cached != nil {
@@ -130,7 +130,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
     	}
     	return parsed, err
     }
-	
+
 	// Download IMDB url
 	parsed["imdb_code"] = id
 	imdb_url := fmt.Sprintf("http://www.imdb.com/title/%s/", id)
@@ -150,13 +150,13 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	body := string(bytes)
 	//fmt.Println(body[0:200])
 	resp.Body.Close()
-	
+
 	// Validity check
 	if strings.Index(body, "div class=\"title_wrapper\">") == -1 {
 		parsed["unreleased"] = true
 		return parsed, err
 	}
-	
+
 	// Poster image
 	poster := getAfter(body, "div class=\"poster\"")
 	if len(poster) == 0 {
@@ -166,12 +166,12 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	poster = getAfter(getAfter(poster, "img"), "src=\"")
 	poster = getBefore(poster, "\"")
 	parsed["cover_image"] = poster
-	
+
 	// Year
 	year := getAfter(body, "<span id=\"titleYear\">")
 	year = getBefore(getAfter(year, ">"), "<")
 	parsed["year"], ok = strconv.Atoi(year)
-	
+
 	// Title
 	title := getAfter(body, "div class=\"title_wrapper\">")
 	title = getBetween(title, ">", "<")
@@ -182,12 +182,12 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	if parsed["year"].(int) > 0 {
 		parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
 	}
-	
+
 	// MPAA Rating
 	mpaa_rating := getAfter(body, "meta itemprop=\"contentRating\"")
 	mpaa_rating = getBetween(mpaa_rating, "content=\"", "\"")
 	parsed["mpaa_rating"] = mpaa_rating
-	
+
 	// IMDb Rating
 	imdb_rating := getAfter(body, "span itemprop=\"ratingValue\"")
 	unreleased := false
@@ -198,7 +198,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	}
 	parsed["unreleased"] = unreleased
 	parsed["imdb_rating"], ok = strconv.ParseFloat(imdb_rating, /*bitsize=*/64)
-	
+
 	// IMDB Rating Count
 	imdb_rating_count := getAfter(body, "itemprop=\"ratingCount\"")
 	imdb_rating_count = getBetween(imdb_rating_count, ">", "<")
@@ -207,7 +207,7 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 		imdb_rating_count = "1";
 	}
 	parsed["imdb_rating_count"], _ = strconv.Atoi(imdb_rating_count)
-	
+
 	// Summary
 	summary := getAfter(body, "class=\"summary_text\"")
 	summary = getBetween(summary, ">", "<")
@@ -219,15 +219,15 @@ func (movieData) ScrapeImdb(id string) (parsed map[string]interface{}, err error
 	if len(summary) == 0 {
 		fmt.Println("ZERO SUM LENGTH (%s)!", id)
 	}
-	
+
 	// TV Show Detection
 	is_tv_show := strings.Index(mpaa_rating, "TV") != -1
 	parsed["is_tv_show"] = is_tv_show
-	
+
 	// Cache result
 	parsed_bytes, ok := GetBytes(parsed)
 	cache.Set([]byte(IMDB_KEY_ID + id), parsed_bytes, /*24 hours=*/24 * 60 * 60)
-	
+
 	// Return gathered data
 	return parsed, err
 }
@@ -240,7 +240,7 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
     }()
     parsed = make(map[string]interface{})
     err = nil
-    
+
     // Check cache
     cached, ok := cache.Get([]byte(IMDB_KEY_ID + id))
     if ok == nil && cached != nil {
@@ -252,7 +252,7 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
     	}
     	return parsed, err
     }
-	
+
 	// Download IMDB url
 	rand.Seed(time.Now().UnixNano())
 	parsed["imdb_code"] = id
@@ -307,7 +307,7 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
 
 	// Title
 	title := body_json["Title"].(string)
-	if parsed["year"] > 0 {
+	if parsed["year"].(int) > 0 {
 		parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
 	} else {
 		parsed["title"] = title
@@ -318,6 +318,35 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
 
 	// Summary
 	parsed["summary"] = body_json["Plot"].(string)
+
+	// Runtime
+	parsed["runtime"] = body_json["Runtime"].(string)
+
+	// Awards, if/a
+	if parsed["awards"] = body_json["Awards"].(string); parsed["awards"] == "N/A" {
+		parsed["awards"] = ""
+	}
+
+	// Genres
+	parsed["genres"] = strings.Split(body_json["Genre"].(string), ", ")
+
+	// Metacritic and/or Rotten Tomatoes, if/a
+	parsed["rotten_tomatoes"] = ""
+	parsed["metacritic"] = ""
+	for _, on_v := range body_json["Ratings"].([]interface{}) {
+		on := on_v.(map[string]interface{})
+		if on["Source"].(string) == "Rotten Tomatoes" {
+			parsed["rotten_tomatoes"], _ = strconv.Atoi(on["Value"].(string)[0:2])
+		}
+		if on["Source"].(string) == "Metacritic" {
+			parsed["metacritic"], _ = strconv.Atoi(on["Value"].(string)[0:2])
+		}
+	}
+
+	// Cast, if/a
+	if parsed["cast"] = body_json["Actors"].(string); parsed["cast"] == "N/A" {
+		parsed["cast"] = ""
+	}
 
 	// TV Show Detection
 	media_type := body_json["Type"].(string)
@@ -339,7 +368,7 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     }()
     err = nil
     parsed := make(chan map[string]interface{}, len(ids))
-    
+
     // Resolve ID's in parallel via the load-balancer
     for _, imdb_id := range ids {
     	go func(imdb_id string) {
@@ -387,7 +416,7 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     		parsed <- got.V
     	} (imdb_id)
     }
-    
+
     // Populate result array from channel
     count := 0
     for ; count < len(ids); {
@@ -397,7 +426,7 @@ func (movieData) ResolveParallel(ids []string, load_balancer_addr string) (ret [
     		ret = append(ret, on)
     	}
     }
-    
+
     // Sort before returning
     countReducer := func (count float64) float64 {
 		return math.Log(count) / math.Log(50) // log base 50
@@ -492,7 +521,7 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 	if len(ids) == 0 {
 		return nil, errors.New("No ID's to resolve")
 	}
-	
+
 	/* Generate the request */
 	to_send := new(bytes.Buffer)
 	json.NewEncoder(to_send).Encode(map[string]interface{}{
@@ -505,7 +534,7 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 	})
 	posting_url := fmt.Sprintf("http://%s/movies", load_balancer_addr)
 	//fmt.Println(to_send)
-	
+
 	/* Execute the request */
 	for ct := 0; ; ct += 1 {
 		res, err := netClient.Post(
@@ -521,7 +550,7 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 			fmt.Println("Retrying - error #" + strconv.Itoa(ct))
 			continue
 		}
-		
+
 		/* Parse the response */
 		var got moviesResponse
 		req_resp, _ := ioutil.ReadAll(res.Body)
@@ -540,12 +569,12 @@ func executeParallelResolution(ids []string, load_balancer_addr string) ([]map[s
 			//return nil, errors.New("Resolution unsuccessful")
 			continue
 		}
-	
+
 		/* Convert output to desired format */
 		for _, elem := range interface_arr {
 			output = append(output, elem.(map[string]interface{}))
 		}
-	
+
 		/* Return parsed response */
 		return output, nil
 	}
@@ -557,40 +586,40 @@ func (movieData) GetRecommendedMovies(extension int, load_balancer_addr string) 
 	if extension < 0 {
 		extension = 0
 	}
-	
+
 	/* Get top Trakt.tv movies */
 	req, err := newTraktRequest(traktPaginateUrl(MoviePopularUrl, 1 + extension, 25))
 	req.Get(&tmp)
 	output = append(output, tmp...)
-	
+
 	req, err = newTraktRequest(traktPaginateUrl(MovieWatchedUrl, 1 + extension, 25))
 	tmp = nil
 	req.Get(&tmp)
 	output = append(output, mapToField(tmp, "movie")...)
-	
+
 	req, err = newTraktRequest(traktPaginateUrl(MovieTrendingUrl, 1 + extension, 25))
 	tmp = nil
 	req.Get(&tmp)
 	output = append(output, mapToField(tmp, "movie")...)
-	
+
 	/* Map output to IMDB id's */
 	ids := filterTraktIds(output)
 	ids = deDup(ids)
 	output = nil
 	fmt.Println(ids)
-	
+
 	// TODO: Get Taste.io recommendations as well
-	
+
 	/* Resolve ID's in parallel */
 	output, err = executeParallelResolution(ids, load_balancer_addr)
-	
+
 	/* Return output */
 	return output, err
 }
 
 func searchTraktMovies(keyword string, item_type string) ([]map[string]interface{}, error) {
 	var tmp []map[string]interface{}
-	
+
 	/* Execute Trakt.tv search for keyword */
 	var base_url string
 	if item_type == "movie" {
@@ -606,7 +635,7 @@ func searchTraktMovies(keyword string, item_type string) ([]map[string]interface
 
 func getTraktWatchlist(item_type string) ([]map[string]interface{}, error) {
 	var tmp []map[string]interface{}
-	
+
 	/* Execute Trakt.tv watchlist retrieval */
 	var base_url string
 	if item_type == "movie" {
@@ -616,7 +645,7 @@ func getTraktWatchlist(item_type string) ([]map[string]interface{}, error) {
 	}
 	req, err := newTraktRequest(traktPaginateUrl(base_url, 1, 50000))
 	req.Get(&tmp)
-	
+
 	return mapToField(tmp, "movie"), err
 }
 
@@ -625,7 +654,7 @@ func cacheSources(sources map[string][]ItemSource) {
 		if sourceArr == nil {
 			continue;
 		}
-		
+
 		/* Retrieve existing cached values, if applicable */
 		var existing []ItemSource
 		cached, ok := cache.Get([]byte(ITEM_KEY_ID + imdb_id))
@@ -637,7 +666,7 @@ func cacheSources(sources map[string][]ItemSource) {
 				panic(v)
 			}
 		}
-		
+
 		/* Gracefully merge current and cached item sources */
 		merged := make(map[string]ItemSource)
 		for _, elem := range sourceArr {
@@ -649,13 +678,13 @@ func cacheSources(sources map[string][]ItemSource) {
 			}
 			merged[elem.Url] = elem
 		}
-		
+
 		sourceArr = nil
 		for _, v := range merged {
 			sourceArr = append(sourceArr, v)
 		}
 		merged = nil
-		
+
 		/* Save merged array to cache */
 		source_bytes, ok := GetBytes(sourceArr)
 		cache.Set([]byte(ITEM_KEY_ID + imdb_id), source_bytes, /*1 hour=*/1 * 60 * 60)
@@ -667,7 +696,7 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	var imdb_ids []string
 	sources := make(map[string][]ItemSource)
 	var err error
-	
+
 	/* Retrieve matches */
 	if imdb_id, ok := opts["id"].(string); ok {
 		sources[imdb_id], err = SearchSourcesParallel(opts)
@@ -681,7 +710,7 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 			return nil, err
 		}
 		imdb_ids = append(imdb_ids, filterTraktIds(tmp)...)
-		
+
 		/* Search sources */
 		source_results, err := SearchSourcesParallel(opts)
 		if err != nil {
@@ -691,14 +720,14 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 			sources[elem.ImdbCode] = append(sources[elem.ImdbCode], elem)
 		}
 	}
-	
+
 	/* Add ID's from sources */
 	for _, sourceItems := range sources {
 		for _, item := range sourceItems {
 			imdb_ids = append(imdb_ids, item.ImdbCode)
 		}
 	}
-	
+
 	/* Resolve matches */
 	imdb_ids = deDup(imdb_ids)
 	if len(imdb_ids) > 0 {
@@ -706,7 +735,7 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	} else {
 		output = make([]map[string]interface{}, 0)
 	}
-	
+
 	/* Correlate resolved items and sources */
 	for idx := 0; idx < len(output); idx += 1 {
 		cur_imdb_code, _ := output[idx]["imdb_code"].(string)
@@ -714,7 +743,7 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 			output[idx]["sources"] = have
 		}
 	}
-	
+
 	/* Return matches */
 	return output, err
 }
@@ -723,7 +752,7 @@ func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface
 	var tmp, output []map[string]interface{}
 	var imdb_ids []string
 	var err error
-	
+
 	/* Retrieve movie watchlist */
 	for ct := 0;; ct += 1 {
 		tmp, err = getTraktWatchlist("movie")
@@ -736,10 +765,10 @@ func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface
 		}
 		break
 	}
-	
+
 	/* Filter IMDB id's from result */
 	imdb_ids = filterTraktIds(tmp)
-	
+
 	/* Resolve matches */
 	imdb_ids = deDup(imdb_ids)
 	if len(imdb_ids) > 0 {
@@ -747,7 +776,7 @@ func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface
 	} else {
 		output = make([]map[string]interface{}, 0)
 	}
-	
+
 	/* Return matches */
 	return output, err
 }
@@ -755,7 +784,7 @@ func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface
 func (movieData) AddToWatchlist(item_type string, item_id string) (map[string]interface{}, error) {
 	var tmp map[string]interface{}
 	var video_obj map[string]interface{}
-	
+
 	/* Execute Trakt.tv watchlist insertion */
 	base_url := WatchlistAddUrl
 	if item_type == "movie" {
@@ -771,7 +800,7 @@ func (movieData) AddToWatchlist(item_type string, item_id string) (map[string]in
 	}
 	req, err := newTraktRequest(base_url)
 	req.Post(video_obj, &tmp)
-	
+
 	return tmp, err
 }
 
@@ -779,7 +808,7 @@ func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interf
 	var tmp []map[string]interface{}
 	var imdb_ids []string
 	var ids []string
-	
+
 	/* Execute Trakt.tv history retrieval */
 	for ct := 0;; ct += 1 {
 		req, err := newTraktRequest(traktPaginateUrl(HistoryGetUrl, 1, 50000))
@@ -790,13 +819,13 @@ func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interf
 			continue
 		}
 		req.Get(&tmp)
-		
+
 		/* Filter for IMDB id's */
 		imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "movie"))...)
 		imdb_ids = append(imdb_ids, filterTraktIds(mapToField(tmp, "show"))...)
-		
+
 		ids = deDup(imdb_ids)
-		
+
 		if len(ids) > 0 {
 			break
 		}
@@ -804,17 +833,17 @@ func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interf
 			return nil, errors.New("Gave up for Trakt history retrieval")
 		}
 	}
-	
+
 	/* Resolve in parallel */
 	output, err := executeParallelResolution(ids, load_balancer_addr)
-	
+
 	return output, err
 }
 
 func (movieData) AddWatchHistory(item_type string, item_id string) (map[string]interface{}, error) {
 	var tmp map[string]interface{}
 	var video_obj map[string]interface{}
-	
+
 	/* Execute Trakt.tv history insertion */
 	var base_url string
 	if item_type == "movie" {
@@ -831,7 +860,7 @@ func (movieData) AddWatchHistory(item_type string, item_id string) (map[string]i
 	}
 	req, err := newTraktRequest(base_url)
 	req.Post(video_obj, &tmp)
-	
+
 	return tmp, err
 }
 
@@ -840,7 +869,7 @@ func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]in
 	// If not cached, silently call SearchForItem and return item of specified ID
 	existing := make([]ItemSource, 0)
 	item_key := []byte(ITEM_KEY_ID + id)
-	
+
 	/* Check if cached */
 	cached, ok := cache.Get(item_key)
 	if ok != nil || cached == nil {
@@ -851,7 +880,7 @@ func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]in
 		if err != nil {
 			return nil, err
 		}
-		
+
 		for _, elem := range outp {
 			if elem["imdb_code"].(string) == id {
 				return elem, nil
@@ -866,7 +895,7 @@ func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]in
 			panic(v)
 		}
 	}
-	
+
 	/* Resolve item */
 	output, err := executeParallelResolution([]string{id}, load_balancer_addr)
 	if err != nil {
@@ -875,7 +904,7 @@ func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]in
 	if len(output) != 1 {
 		return nil, errors.New(fmt.Sprintf("Expected 1 resolved, got %d", len(output)))
 	}
-	
+
 	/* Fill in sources and return requested item */
 	output[0]["sources"] = existing
 	return output[0], nil

@@ -73,7 +73,7 @@ function preventDefault(e) {
   e = e || window.event;
   if (e.preventDefault)
       e.preventDefault();
-  e.returnValue = false;  
+  e.returnValue = false;
 }
 
 function preventDefaultForScrollKeys(e) {
@@ -96,10 +96,10 @@ function disableScroll() {
 function enableScroll() {
     if (window.removeEventListener)
         window.removeEventListener('DOMMouseScroll', preventDefault, false);
-    window.onmousewheel = document.onmousewheel = null; 
-    window.onwheel = null; 
-    window.ontouchmove = null;  
-    document.onkeydown = null;  
+    window.onmousewheel = document.onmousewheel = null;
+    window.onwheel = null;
+    window.ontouchmove = null;
+    document.onkeydown = null;
 }
 
 // API wrapper functions.
@@ -216,7 +216,7 @@ $(function () {
 			console.log("New notification permissions:", permission);
 		});
 	}
-	
+
 	// Function to retrieve HTML markup for a specified rating, scaled 0 to 100.
 	var retrieveRatingMarkup = function(rating_percentage){
 		var ret_div = $('<div class="star-ratings-css"></div>');
@@ -224,7 +224,7 @@ $(function () {
 		ret_div.append($('<div class="star-ratings-css-bottom"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>'));
 		return ret_div.wrap('<p/>').parent().html();
 	};
-	
+
 	// Define history functions.
 	history = {
 		"watchlist": [],
@@ -254,7 +254,7 @@ $(function () {
 	var isMovieInWatched = function(imdb_code) {
 		return history.watched.indexOf(imdb_code) !== -1;
 	};
-	
+
 	// Function to generate markup for movie poster item in grid.
 	var retrieveCoverMarkup = function(on) {
 		var li = $('<li class="grid-item"></li>');
@@ -362,7 +362,7 @@ $(function () {
 	}, function(e) {
 		$(this).css('color', '');
 	});
-	
+
 	// Populate grid with top movies by default, or requested movies if search term exists.
 	var onHomepage = false, autoPopulationCounter = 0;
 	var customRefreshTitle, customRefreshMessage, customRefreshTimer = 2000;
@@ -373,7 +373,7 @@ $(function () {
 		callback(limit).then((data) => {
 			console.log(data);
 			data = data.filter((x) => !x.unreleased);
-			
+
 			// Initialize the carousel.
 			if(!$('#highlights').length){
 				var carousel_div = $('<div id="highlights" class="carousel slide" data-ride="carousel"></div>');
@@ -383,7 +383,7 @@ $(function () {
 				carousel_div.append($('<a class="right carousel-control" href="#highlights" data-slide="next"><span class="glyphicon glyphicon-chevron-right"></span></a>'));
 				$('#carousel_space').append(carousel_div);
 			}
-			
+
 			// Populate the highlight carousel.
 			const HIGHLIGHTED_COUNT = 5;
 			var highlighted = [];
@@ -392,12 +392,12 @@ $(function () {
 			$('.carousel-inner').empty();
 			for(var i = 0; i < Math.min(HIGHLIGHTED_COUNT, data.length); i++){
 				if(highlighted.length == data.length) break;
-				
+
 				// Add the indicator.
 				var li = $('<li data-target="#highlights" data-slide-to="' + i + '" class="active"></li>');
 				if(i > 0) li.removeClass("active");
 				$('.carousel-indicators').append(li);
-				
+
 				// Add the image.
 				var ind = -1;
 				var checked = [];
@@ -424,7 +424,7 @@ $(function () {
 				if(i > 0) img_div.removeClass("active");
 				img_div.append($('<img class="carousel_img" src="' + cur.cover_image + '" alt="' + cur.title + '" />'));
 				var cap = $('<div class="carousel-caption"></div>');
-				cap.append($('<div class="carousel-title"><h3 style="font-size: 2vw;">' + cur.title + ' [' + (cur.mpaa_rating || "NR") + ']</h3></div>'));
+				cap.append($('<div class="carousel-title"><h3 style="font-size: 2vw; display: inline;">' + cur.title + '</h3>&nbsp;&nbsp;&nbsp;<p class="rating-box">' + (cur.mpaa_rating || "NR") + '</p></div>'));
 				cap.append($(retrieveRatingMarkup(cur.imdb_rating * 10.0)));
 				var summary = cur.summary;
 				if(!summary || !summary.length) summary = "(no description available)";
@@ -438,7 +438,7 @@ $(function () {
 				$('.carousel-inner').append(img_div);
 			}
 			$('#highlights').css('opacity', '1');
-		
+
 			// Populate the grid.
 			$('#grid').empty();
 			$('#empty-search').hide();
@@ -506,6 +506,7 @@ $(function () {
 					resizeWhenLoaded();
 					enableScroll();
 
+					/*
 					// Inform user.
 					swal({
 						title: "Extended results",
@@ -514,11 +515,12 @@ $(function () {
 						buttons: false,
 						timer: 1000
 					});
+					*/
 				});
 			}
 		}
 	});
-	
+
 	// Set up iframe.
 	$('#frameModal').bmdIframe();
 	var openPage = function(opts) {
@@ -611,9 +613,9 @@ $(function () {
 			$('#carousel_space').empty();
 			$('#downloads').hide();
 			$('.quota-bars').hide();
-			customRefreshTitle = "Executed search";
-			customRefreshMessage = "Successfully executed search on server.";
-			customRefreshTimer = 1000;
+			// customRefreshTitle = "Executed search";
+			// customRefreshMessage = "Successfully executed search on server.";
+			// customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => searchForItem(params.key), /*limit=*/12 * 1);
 			}, 150);
@@ -662,18 +664,18 @@ $(function () {
 		} else if(hash === "view_watchlist"){
 			$('#downloads').hide();
 			$('.quota-bars').hide();
-			customRefreshTitle = "Retrieved watchlist";
-			customRefreshMessage = "Successfully retrieved watchlist.";
-			customRefreshTimer = 1000;
+			// customRefreshTitle = "Retrieved watchlist";
+			// customRefreshMessage = "Successfully retrieved watchlist.";
+			// customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
 			}, 150);
 		} else if(hash === "view_history"){
 			$('#downloads').hide();
 			$('.quota-bars').hide();
-			customRefreshTitle = "Retrieved history";
-			customRefreshMessage = "Successfully retrieved history.";
-			customRefreshTimer = 1000;
+			// customRefreshTitle = "Retrieved history";
+			// customRefreshMessage = "Successfully retrieved history.";
+			// customRefreshTimer = 1000;
 			setTimeout(() => {
 				populateGrid((limit) => getWatched(), /*limit=*/12 * 1);
 			}, 150);
@@ -789,12 +791,12 @@ $(function () {
 					var bandwidth_ratio = 100.0 * data.bandwidth_used / data.bandwidth_max;
 					var space_bar = $('.space-bar').find(".progress-bar");
 					var bandwidth_bar = $('.bandwidth-bar').find(".progress-bar");
-					
+
 					space_ratio = space_ratio.toFixed(2) + "%";
 					bandwidth_ratio = bandwidth_ratio.toFixed(2) + "%";
 					space_bar.css("width", space_ratio);
 					bandwidth_bar.css("width", bandwidth_ratio);
-					
+
 					var space_desc = humanFileSize(data.space_used) + "/" + humanFileSize(data.space_max);
 					var bandwidth_desc = humanFileSize(data.bandwidth_used) + "/" + humanFileSize(data.bandwidth_max);
 					space_bar.text(space_desc);
@@ -823,11 +825,11 @@ $(function () {
 				});
 			});
 		}
-		
+
 		// Mark done by resetting window.location.hash
 		window.history.pushState(null, null, '#');
 	});
-	
+
 	// Listen for events from modals.
 	window.addEventListener("message", (e) => {
 		var parsed = JSON.parse(e.data);

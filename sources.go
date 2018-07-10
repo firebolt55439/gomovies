@@ -11,7 +11,7 @@ import (
 	"strings"
 	"math"
 	"net/http"
-	
+
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -74,7 +74,7 @@ func getTokenIfNecessary(configuration SourceA) (string, error) {
 	if !expiry_time.IsZero() && (expiry_time.Sub(time.Now().Local()) >= (time.Duration(10) * time.Second)) {
 		return sourceApiStorage.Token, nil
 	}
-	
+
 	/* Otherwise, acquire a new token */
 	target_url := fmt.Sprintf("%s?get_token=get_token", configuration.SourceApiBaseUrl)
 	res, err := netClient.Get(
@@ -85,15 +85,15 @@ func getTokenIfNecessary(configuration SourceA) (string, error) {
 		return "", err
 	}
 	defer res.Body.Close()
-	
+
 	/* Parse the response */
 	var got SourceApiStorage
 	json.NewDecoder(res.Body).Decode(&got)
-	
+
 	/* Cache parsed response */
 	sourceApiStorage.Token = got.Token
 	sourceApiStorage.ExpiryTime = time.Now().Local().Add(15 * time.Minute)
-	
+
 	/* Return parsed response */
 	return got.Token, nil
 }
@@ -108,13 +108,13 @@ func detectTitleQuality(title string) (string, error) {
 	for _, elem := range configuration.TitleQualityHDKeywords {
 		qualityTitleMap[elem] = "HD"
 	}
-	
+
 	for k, v := range qualityTitleMap {
 		if strings.Contains(title, k) {
 			return v, nil
 		}
 	}
-	
+
 	return "", errors.New("Could not detect quality")
 }
 
@@ -131,7 +131,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			return nil, err
 		}
 		ret = make([]ItemSource, 0)
-		
+
 		/* Generate search parameters */
 		token, err := getTokenIfNecessary(configuration)
 		if err != nil {
@@ -146,18 +146,18 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			"token": {token},
 		}
 		searchParams.Set("min_" + configuration.SourceApiSortKey, strconv.Itoa(3))
-		
+
 		if imdb_id, ok := opts["id"].(string); ok {
 			searchParams.Set("search_imdb", imdb_id)
 		} else if keyword, ok := opts["keyword"].(string); ok {
 			searchParams.Set("search_string", keyword)
 		}
-		
+
 		/* Continue retrying request up to threshold */
 		target_url := fmt.Sprintf("%s?%s", configuration.SourceApiBaseUrl, searchParams.Encode())
 		fmt.Println(target_url);
 		var results []map[string]interface{}
-		
+
 		for attempt := 1; attempt <= 5; attempt += 1{
 			/* Generate and execute request */
 			res, err := netClient.Get(
@@ -168,7 +168,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				return nil, err
 			}
 			defer res.Body.Close()
-		
+
 			/* Parse and validate response */
 			var got map[string]interface{}
 			json.NewDecoder(res.Body).Decode(&got)
@@ -177,7 +177,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			slice_until := int(math.Min(300, float64(len(pretty_printed))))
 			fmt.Println(string(pretty_printed)[0:slice_until])
 			*/
-			
+
 			if error, ok := got["error"]; ok {
 				if strings.Contains(error.(string), "No results found") {
 					return ret, nil
@@ -189,7 +189,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				time.Sleep(time.Duration(attempt) * time.Second)
 				continue
 			}
-			
+
 			var resultsArr []interface{}
 			for _, v := range got {
 				resultsArr = v.([]interface{}) // first value
@@ -198,14 +198,14 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			for _, elem := range resultsArr {
 				results = append(results, elem.(map[string]interface{}))
 			}
-			
+
 			break
 		}
-		
+
 		if len(results) == 0 {
 			return nil, errors.New("Could not complete search request!")
 		}
-		
+
 		/* Convert response to desired format */
 		qualityCategoryMap := map[string]string {
 			"720": "720p",
@@ -224,7 +224,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			if _, ok := episode_info["imdb"]; !ok {
 				continue
 			}
-			
+
 			quality, have_quality := "(unknown)", false
 			category := on["category"].(string)
 			title := on["title"].(string)
@@ -248,9 +248,9 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 					on["category"],
 				))
 			}
-			
+
 			humanizedSize := bytesToSize(on["size"].(float64))
-			
+
 			ret = append(ret, ItemSource{
 				ImdbCode: episode_info["imdb"].(string),
 				Quality: quality,
@@ -261,7 +261,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				ClientCount: int(on[configuration.SourceApiClientKey].(float64)),
 				SourceHostname: configuration.SourceApiHostname,
 			})
-			
+
 			if _, ok := episode_info["seasonnum"]; ok {
 				season_num, _ := strconv.Atoi(episode_info["seasonnum"].(string))
 				ep_num, _ := strconv.Atoi(episode_info["epnum"].(string))
@@ -271,18 +271,18 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				}
 			}
 		}
-		
+
 		/* Return converted response */
 		return ret, err
 	},
-	
+
 	func (opts map[string]interface{}, conf SourceConfig) (ret []ItemSource, err error) {
 		var configuration SourceB
 		if err := mapstructure.Decode(conf, &configuration); err != nil {
 			return nil, err
 		}
 		ret = make([]ItemSource, 0)
-		
+
 		/* Generate url */
 		search_term := ""
 		if imdb_id, ok := opts["id"].(string); ok {
@@ -290,7 +290,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 		} else if _, ok := opts["keyword"].(string); ok {
 			return nil, errors.New("Keyword search is not supported by this source")
 		}
-		
+
 		form_url := fmt.Sprintf(
 			"%s/s/?q=%s&category=%d&page=%d&orderby=%d",
 			configuration.BaseUrl,
@@ -300,9 +300,9 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			configuration.OrderBy,
 		)
 		fmt.Println(form_url)
-		
+
 		// TODO: Race to first parsed response via proxy list
-		
+
 		/* Download page */
 		var resp (*http.Response)
 		resp, err = netClient.Get(form_url) // retries are baked in
@@ -311,14 +311,14 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 		}
 		bytes, _ := ioutil.ReadAll(resp.Body)
 		body := string(bytes)
-		
+
 		/* Parse search results */
 		table_arr := strings.Split(body, "id=\"searchResult\"")
 		if len(table_arr) <= 1 {
 			return nil, errors.New("Could not find search result table")
 		}
 		table := strings.Split(table_arr[1], "</table>")[0]
-		
+
 		rows := strings.Split(table, "<tr")[1:]
 		for _, on := range rows {
 			/* Validity check */
@@ -349,26 +349,26 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			if !passed {
 				continue
 			}
-			
+
 			link := strings.Split(strings.Split(on, configuration.LinkStartKeyword)[1], "\"")[0]
 			link = configuration.LinkStartKeyword + link
-			
+
 			size := strings.Split(strings.Split(on, ", Size ")[1], ",")[0]
 			size = strings.Replace(size, "&nbsp;", " ", -1)
-			
+
 			filename := strings.Split(strings.Split(on, "detName\">")[1], "\">")[1]
 			filename = strings.Split(filename, "</a>")[0]
-			
+
 			quality, ok := detectTitleQuality(filename)
 			if ok != nil {
 				quality = "SD"
 			}
-			
+
 			counts_area := strings.SplitN(on, "td align=\"right\">", 2)
 			counts_area = strings.Split(counts_area[1], "\"right\">")
 			source_count, _ := strconv.Atoi(strings.Split(counts_area[0], "</td>")[0])
 			clients_count, _ := strconv.Atoi(strings.Split(counts_area[1], "</td>")[0])
-			
+
 			ret = append(ret, ItemSource{
 				ImdbCode: search_term,
 				Quality: quality,
@@ -380,7 +380,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				SourceHostname: configuration.SourceApiHostname,
 			})
 		}
-		
+
 		return ret, err
 	},
 
@@ -390,7 +390,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			return nil, err
 		}
 		ret = make([]ItemSource, 0)
-		
+
 		/* Generate url */
 		search_term := ""
 		if imdb_id, ok := opts["id"].(string); ok {
@@ -398,7 +398,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 		} else if _, ok := opts["keyword"].(string); ok {
 			return nil, errors.New("Keyword search is not supported by this source")
 		}
-		
+
 		form_url := fmt.Sprintf(
 			"%s?query_term=%s",
 			configuration.BaseUrl,
