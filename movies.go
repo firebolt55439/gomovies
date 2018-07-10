@@ -307,7 +307,11 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
 
 	// Title
 	title := body_json["Title"].(string)
-	parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
+	if parsed["year"] > 0 {
+		parsed["title"] = fmt.Sprintf("%s (%d)", title, parsed["year"])
+	} else {
+		parsed["title"] = title
+	}
 
 	// MPAA Rating
 	parsed["mpaa_rating"] = body_json["Rated"].(string)

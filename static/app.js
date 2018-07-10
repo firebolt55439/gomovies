@@ -332,13 +332,14 @@ $(function () {
 		for(var i = 0; i < allItems.length; i += rowNumElements){
 			var slice = allItems.slice(i, i + rowNumElements);
 			var heights = slice.map(x => x.offsetHeight).filter(x => x > 0);
-			console.log(heights);
+			// console.log(heights);
 			var minHeight = Math.min(...heights);
-			console.log(minHeight);
+			// console.log(minHeight);
 			for(var j = 0; j < slice.length; j++){
 				$(slice[j].querySelector(".grid-img")).height(minHeight);
 			}
 		}
+		$('.loader').hide();
 	};
 	var resizeWhenLoaded = function() {
 		imagesLoaded( document.querySelector('.grid-item'), function( instance ) {
@@ -351,6 +352,16 @@ $(function () {
 		"ids": ["tt0108052", "tt1408101", "tt0075860", "tt0120815", "tt0264464"]
 	}, console.log);
 	*/
+
+	// Handle navbar clicks.
+	$('.nav_btn').click(function(e) {
+		$(this).blur();
+	});
+	$('.nav_btn').hover(function(e) {
+		$(this).css('color', 'black');
+	}, function(e) {
+		$(this).css('color', '');
+	});
 	
 	// Populate grid with top movies by default, or requested movies if search term exists.
 	var onHomepage = false, autoPopulationCounter = 0;
@@ -444,7 +455,6 @@ $(function () {
 				var li = retrieveCoverMarkup(on);
 				$('#grid').append(li);
 			}
-			$('.loader').hide();
 			resizeWhenLoaded();
 
 			// Inform user of success
@@ -493,7 +503,6 @@ $(function () {
 						var li = retrieveCoverMarkup(on);
 						$('#grid').append(li);
 					}
-					$('.loader').hide();
 					resizeWhenLoaded();
 					enableScroll();
 
@@ -641,15 +650,6 @@ $(function () {
 					$('.loader').hide();
 					setTimeout(refreshHomepage, 150);
 				});
-				/*
-				// Inform user.
-				var item = metadata.getItemById(imdb_id);
-				let notif = new Notification('Added To Watchlist', {
-					body: ("Added " + item.title + " to watchlist."),
-					icon: item.cover_image,
-					silent: true
-				});
-				*/
 			});
 		} else if(hash === "refresh"){
 			$('#downloads').hide();
