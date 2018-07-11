@@ -185,10 +185,21 @@ function lookupItem(imdb_id) {
 	});
 }
 
-function fetchItem(uri) {
+function resolveParallel(ids) {
+	return new Promise((resolve, reject) => {
+		apiReq("resolveParallel", {
+			"ids": ids
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function fetchItem(info) {
 	return new Promise((resolve, reject) => {
 		apiReq("fetchUri", {
-			"uri": uri
+			"uri": info.uri,
+			"imdb_id": info.imdb_code
 		}, function(data) {
 			resolve(data);
 		});
@@ -200,7 +211,24 @@ function getDownloads() {
 		apiReq("getDownloads", {
 			//
 		}, function(data) {
-			resolve(data.downloads);
+			data.downloads = data.downloads || [];
+			var idsToResolve = data.downloads.map(x => x.imdb_id).filter(x => x && x.length > 0);
+			if(idsToResolve.length == 0){
+				return resolve(data.downloads);
+			}
+			resolveParallel(idsToResolve).then((resolved) => {
+				var ret = data.downloads;
+				for(var item of resolved) {
+					var on = item.imdb_code;
+					for (var i = ret.length - 1; i >= 0; i--) {
+						if(ret[i].imdb_id === on){
+							ret[i].resolved = resolved;
+							break;
+						}
+					}
+				}
+				resolve(ret);
+			});
 		});
 	});
 }
@@ -696,17 +724,18 @@ $(function () {
 					}
 				});
 			};
-			populateDownloads = (downloads) => {
+			populateDownloads = (downloads, resolved) => {
 				var tbody = $('#downloads').find("tbody");
 				tbody.empty();
 				downloads = downloads || [];
 				console.log("Downloads:", downloads);
 				var keep_running = false;
-				for(var item of downloads){
+				for(var item of downloads) {
 					var tr = $('<tr></tr>');
 					var download_done = !item.progress;
 					var col_width = (download_done ? 175 : 75);
 					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
+					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.resolved ? item.resolved.title : "(N/A)") + '</td>'));
 					if(item.progress){
 						keep_running = true;
 						var prog = parseFloat(item.progress).toFixed(2);
@@ -722,22 +751,22 @@ $(function () {
 					} else {
 						var watch_hash = '#watch_download?' + $.param({
 							"folder_id": item.id
-						})
+						});
+						var watch_hash_icloud = '#watch_download?' + $.param({
+							"icloud_id": item.id
+						});
 						var download_btn_id = 'download-btn-' + item.id;
 						var delete_btn_id = 'delete-btn-' + item.id;
-						tr.append($('<td> \
-							<a href="' + watch_hash + '" class="btn btn-success" role="button"> \
-								Watch <span class="glyphicon glyphicon-film"></span> \
-							</a> \
-							&nbsp; \
-							<a href="#" class="btn btn-primary" role="button" id="' + download_btn_id + '"> \
-								Download <span class="glyphicon glyphicon-download-alt"></span> \
-							</a> \
-							&nbsp; \
-							<a href="#" class="btn btn-danger" role="button" id="' + delete_btn_id + '"> \
-								Delete <span class="glyphicon glyphicon-trash"></span> \
-							</a> \
-						</td>'));
+						var buttons = [];
+						if(item.hasUploadedClient){
+							buttons.push('<a href="' + watch_hash + '" class="btn btn-success">Stream from iCloud <span class="glyphicon glyphicon-film"></span></a>');
+						}
+						if(item.source === "oauth"){
+							buttons.push('<a href="' + watch_hash + '" class="btn btn-success">Watch in Cloud <span class="glyphicon glyphicon-film"></span></a>');
+							buttons.push('<a href="#" class="btn btn-primary" role="button" id="' + download_btn_id + '">Download from Cloud <span class="glyphicon glyphicon-download-alt"></span></a>');
+							buttons.push('<a href="#" class="btn btn-danger" role="button" id="' + delete_btn_id + '">Delete from Cloud <span class="glyphicon glyphicon-trash"></span></a>');
+						}
+						tr.append($(`<td>${buttons.join("&nbsp;")}</td>`));
 						tr.find(".btn-primary").click(function(folder_id) {
 							return function() {
 								$('.loader').show();
@@ -769,15 +798,19 @@ $(function () {
 							};
 						}(item.id));
 					}
-					if(item.warnings){
-						tr.addClass("warning");
-						tr.find(".progress-bar").addClass("progress-bar-warning");
-					} else if(item.progress){
+					if(item.progress){
 						tr.addClass("active");
 						tr.find(".progress-bar").addClass("progress-bar-info");
 					} else {
 						tr.addClass("success");
 					}
+					var currentStatus = "";
+					if(item.isDownloadingCloud) currentStatus = "Cloud is downloading";
+					else if(item.isDownloadingClient) currentStatus = "Client is downloading";
+					else if(item.isUploadingClient) currentStatus = "Client is uploading";
+					else if(item.hasUploadedClient) currentStatus = "In iCloud Drive";
+					else if(item.hasDownloadedCloud) currentStatus = "Only in Cloud";
+					tr.append(`<td class="h5">${currentStatus}</td>`);
 					tbody.append(tr);
 				}
 				apiReq("oauthQuery", {

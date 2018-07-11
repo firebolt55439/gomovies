@@ -25,7 +25,7 @@ type OAuth struct {
 	api_url string
 	username string
 	password string
-	
+
 	/* Filled in automatically */
 	expiry_time time.Time
 	access_token string
@@ -41,7 +41,7 @@ func (oa *OAuth) GetAccessToken(username, password string) (map[string]interface
 		"username": {username},
 		"password": {password},
 	}
-    
+
     /* Send payload */
     res, ok := netClient.PostForm(
 		oa.access_token_url,
@@ -52,7 +52,7 @@ func (oa *OAuth) GetAccessToken(username, password string) (map[string]interface
 		fmt.Println("Error getting OAuth token:", ok)
 		return nil, errors.New("Could not get OAuth token")
 	}
-	
+
 	/* Return parsed JSON */
 	fmt.Println("Status code:", res.StatusCode)
 	var got map[string]interface{}
@@ -74,7 +74,7 @@ func (oa *OAuth) TestToken() (bool) {
 	if !oa.expiry_time.IsZero() && (oa.expiry_time.Sub(time.Now().Local()) >= (time.Duration(2) * time.Minute)) {
 		return true
 	}
-	
+
 	/* Test token with API call */
 	//fmt.Println("Testing token")
 	res, ok := netClient.PostForm(
@@ -88,7 +88,7 @@ func (oa *OAuth) TestToken() (bool) {
 		return false
 	}
 	defer res.Body.Close()
-	
+
 	/* Parse returned JSON */
 	//fmt.Println("Test status code:", res.StatusCode)
 	if res.StatusCode == 200 {
@@ -104,7 +104,7 @@ func (oa *OAuth) Query(function string, data map[string]interface{}) (map[string
 	if !oa.TestToken() {
 		return nil, errors.New("Unable to procure valid token")
 	}
-	
+
 	/* Generate payload */
 	payload := url.Values{
 		"func": {function},
@@ -113,7 +113,7 @@ func (oa *OAuth) Query(function string, data map[string]interface{}) (map[string
 	for k, v := range data {
 		payload.Set(k, v.(string))
 	}
-    
+
     /* Return parsed JSON */
     res, ok := netClient.PostForm(
 		oa.api_url,
@@ -123,7 +123,7 @@ func (oa *OAuth) Query(function string, data map[string]interface{}) (map[string
 		return nil, ok
 	}
 	defer res.Body.Close()
-	
+
 	var got map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&got)
 	//fmt.Println("Got:", got, "status code:", res.StatusCode)
@@ -140,7 +140,7 @@ func (oa *OAuth) ApiCall(path string, method string, data map[string]interface{}
 	if !oa.TestToken() {
 		return nil, errors.New("Unable to procure valid token")
 	}
-	
+
 	/* Generate payload */
 	payload := url.Values{}
 	for k, v := range data {
@@ -149,19 +149,19 @@ func (oa *OAuth) ApiCall(path string, method string, data map[string]interface{}
 	if method != "POST" {
 		payload = nil
 	}
-	
+
 	/* Generate request */
 	target_url := configuration.RestApiUrl + path
 	req, _ := http.NewRequest(method, target_url, nil/*payload*/)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", oa.access_token))
-    
+
     /* Return parsed JSON */
     res, ok := netClient.Do(req)
 	if ok != nil {
 		return nil, ok
 	}
 	defer res.Body.Close()
-	
+
 	var got map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&got)
 	//fmt.Println("Got:", got, "status code:", res.StatusCode)

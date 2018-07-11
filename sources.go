@@ -76,7 +76,11 @@ func getTokenIfNecessary(configuration SourceA) (string, error) {
 	}
 
 	/* Otherwise, acquire a new token */
-	target_url := fmt.Sprintf("%s?get_token=get_token", configuration.SourceApiBaseUrl)
+	target_url := fmt.Sprintf(
+		"%s?app_id=%s&get_token=get_token",
+		configuration.SourceApiBaseUrl,
+		configuration.SourceApiClientId,
+	)
 	res, err := netClient.Get(
 		target_url,
 	)

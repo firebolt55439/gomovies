@@ -130,7 +130,10 @@ function renderOptions(event, item){
 				if(value === "cloud"){
 					window.parent.postMessage(JSON.stringify({
 						type: "quality_select",
-						data: url
+						data: {
+							uri: url,
+							imdb_code: item.imdb_code
+						}
 					}), "*");
 					throw null;
 				} else if(value === "myself"){

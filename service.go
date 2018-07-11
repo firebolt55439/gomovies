@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 	"strconv"
+	"encoding/json"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"strings"
 )
@@ -167,12 +168,16 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				}
 				fmt.Println("retried:", outp)
 			}
+			downloadPool.RegisterOAuthDownloadStart(req_data["imdb_id"].(string), outp[configuration.CloudItemIdKey].(string), outp["title"].(string))
+			tmp_j, _ := json.Marshal(outp)
+			fmt.Println(string(tmp_j))
 			return outp, err
 		case "getDownloads":
 			// TODO: Start keeping track of IMDB id's along with downloads and other metadata
 			// metadata: start time of download, IMDB id
 			// TODO: Check if in iCloud drive or not
 			// TODO: Allow downloading in background
+			// TODO: Refresh oauth download states
 			/* Retrieve main folder */
 			res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
 			if err != nil {
@@ -192,9 +197,15 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			}
 			list = append(list, list_tmp...)
 
+			/* Refresh and process current download states */
+			downloadPool.RefreshDownloadStates(list)
+
+			/* Retrieve all downloads from pool */
+			download_list := downloadPool.RetrieveDownloads()
+
 			/* Return in desired format. */
 			return map[string]interface{}{
-				"downloads": list,
+				"downloads": download_list,
 			}, err
 		case "getRecommendedMovies":
 			extension, ok := req_data["extended"].(string)
