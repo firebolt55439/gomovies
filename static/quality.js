@@ -8,6 +8,16 @@ function commaSeparateNumber(val){
 function renderOptions(event, item){
     //console.log("modal:", sources);
     // Fill in information fields.
+    var downloads;
+    var isAssociate = false;
+    if(item.downloads){
+    	downloads = item.downloads;
+    	item = item.item;
+    	isAssociate = true;
+    	$('#quality_header').text("Select Download:");
+    } else {
+    	$('#quality_header').text("Select Source:");
+    }
     $('#cover-img').attr('src', item.cover_image);
     $('#summary-text').text(item.summary);
     $('#mpaa-rating').text(item.mpaa_rating);
@@ -43,6 +53,68 @@ function renderOptions(event, item){
     // Fill in source selection.
     var fillInOptions = function(sources) {
     	$('#options').empty();
+    	if(isAssociate){
+    		var pretty_source = {
+    			"oauth": "Cloud",
+    			"disk": "iCloud Drive"
+    		};
+
+    		// Generate list
+    		console.log(downloads);
+    		var sortFn = (a, b) => {
+    			if(a.name < b.name) return -1;
+    			if(a.name > b.name) return 1;
+    			return 0;
+    		};
+    		downloads = downloads.filter(x => x.imdb_id.length == 0).sort(sortFn).concat(downloads.filter(x => x.imdb_id.length > 0));
+    		for(var on of downloads){
+    			var li = $('<li class="opt-select" data-name="' + on.name + '" data-id="' + on.id + '"></li>');
+    			var desc_arr = [];
+    			desc_arr.push(on.name);
+    			desc_arr.push(pretty_source[on.source]);
+    			li.text(desc_arr.join(" | "));
+    			if(on.imdb_id.length == 0){
+    				li.css('background-color', "rgb(0,128,0)");
+    			} else {
+    				li.css('background-color', "rgb(128,0,0)");
+    			}
+    			$('#options').append(li);
+    		}
+    		if(downloads.length == 0){
+    			$('#quality_header').hide();
+    			$('#none_available').show();
+    		}
+
+    		// Handle clicks.
+    		$('.opt-select').click(function() {
+    			var that = $(this);
+    			var name = that.data("name");
+    			var id = that.data("id");
+    			swal({
+    				title: "Are you sure?",
+    				icon: "warning",
+    				text: `Is '${name}' this downloaded item?`,
+    				buttons: {
+    					cancel: true,
+    					confirm: {
+    						text: "Yes, it is!"
+    					}
+    				},
+    				icon: item.cover_image
+    			}).then((value) => {
+    				if(!value) return;
+    				console.log("Association confirmed.");
+    				window.parent.postMessage(JSON.stringify({
+    					type: "associate_select",
+    					data: {
+    						cloud_id: id,
+    						imdb_code: item.imdb_code
+    					}
+    				}), "*");
+    			});
+    		});
+    		return;
+    	}
 		var sort_order = {
 			"4K": 1,
 			"3D": 2,
@@ -243,8 +315,9 @@ $(function() {
 		}, 10);
 	}, false);
 
+	var win_type = window.location.hash ? "associate" : "quality";
 	window.parent.postMessage(JSON.stringify({
-		"type": "quality_window_open",
+		"type": `${win_type}_window_open`,
 		"data": {}
 	}), "*");
 });

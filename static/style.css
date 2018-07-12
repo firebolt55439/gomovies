@@ -289,7 +289,7 @@ div.carousel {
 }
 
 .carousel_img {
-  max-width: 200px !important;
+  height: 300px !important;
 }
 
 .rating-box {
@@ -415,6 +415,22 @@ div.carousel {
 	position: absolute;
 	top: 5%;
 	left: 5%;
+  opacity: 0.0;
+}
+
+.bottom-right-corner {
+  z-index: 200;
+  position: absolute;
+  bottom: 5%;
+  right: 5%;
+}
+
+.top-left-corner-badge {
+  z-index: 200;
+  position: absolute;
+  top: 5%;
+  left: 5%;
+  opacity: 1.0;
 }
 
 #grid li:hover .top-right-corner {
@@ -422,7 +438,15 @@ div.carousel {
 }
 
 #grid li:hover .top-left-corner {
-	display: none;
+	opacity: 1.0;
+}
+
+#grid li:hover .top-left-corner-badge {
+  opacity: 0.0;
+}
+
+#grid li:hover .bottom-right-corner {
+  display: none;
 }
 
 /* Star rating */

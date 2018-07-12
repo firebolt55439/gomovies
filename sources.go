@@ -122,7 +122,7 @@ func detectTitleQuality(title string) (string, error) {
 	return "", errors.New("Could not detect quality")
 }
 
-func bytesToSize(bytes float64) (string) {
+func BytesToSize(bytes float64) (string) {
 	i := math.Floor(math.Log(bytes) / math.Log(1024))
 	prefixArr := []string{"B", "KiB", "MiB", "GiB", "TiB"}
 	return fmt.Sprintf("%.2f %s", (bytes / math.Pow(1024, i)), prefixArr[int(i)])
@@ -253,7 +253,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 				))
 			}
 
-			humanizedSize := bytesToSize(on["size"].(float64))
+			humanizedSize := BytesToSize(on["size"].(float64))
 
 			ret = append(ret, ItemSource{
 				ImdbCode: episode_info["imdb"].(string),
@@ -468,7 +468,7 @@ var sources = []func(map[string]interface{}, SourceConfig) ([]ItemSource, error)
 			ret = append(ret, ItemSource{
 				ImdbCode: search_term,
 				Quality: on["quality"].(string),
-				Size: bytesToSize(on["size_bytes"].(float64)),
+				Size: BytesToSize(on["size_bytes"].(float64)),
 				Filename: "(no filename available)",
 				Url: uri,
 				SourceCount: int(on[configuration.SourceApiSourceKey].(float64)),

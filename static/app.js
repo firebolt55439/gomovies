@@ -185,6 +185,16 @@ function lookupItem(imdb_id) {
 	});
 }
 
+function resolveItem(imdb_id) {
+	return new Promise((resolve, reject) => {
+		apiReq("imdbIdLookup", {
+			"id": imdb_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 function resolveParallel(ids) {
 	return new Promise((resolve, reject) => {
 		apiReq("resolveParallel", {
@@ -206,6 +216,25 @@ function fetchItem(info) {
 	});
 }
 
+function associateItem(info) {
+	return new Promise((resolve, reject) => {
+		apiReq("associateDownload", {
+			"cloud_id": info.cloud_id.toString(),
+			"imdb_id": info.imdb_code
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function getAssociatedDownloads() {
+	return new Promise((resolve, reject) => {
+		apiReq("getAssociatedDownloads", {}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 function getDownloads() {
 	return new Promise((resolve, reject) => {
 		apiReq("getDownloads", {
@@ -217,12 +246,13 @@ function getDownloads() {
 				return resolve(data.downloads);
 			}
 			resolveParallel(idsToResolve).then((resolved) => {
+				resolved = resolved.resolved;
 				var ret = data.downloads;
 				for(var item of resolved) {
 					var on = item.imdb_code;
 					for (var i = ret.length - 1; i >= 0; i--) {
 						if(ret[i].imdb_id === on){
-							ret[i].resolved = resolved;
+							ret[i].resolved = item;
 							break;
 						}
 					}
@@ -236,7 +266,7 @@ function getDownloads() {
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
-let child, currentItem, lastDownloadedUrl, history
+let child, currentItem, lastDownloadedUrl, history, assocDownloads
 $(function () {
 	// Set up notification permissions
 	if(Notification.permission !== "denied" && Notification.permission !== "granted") {
@@ -276,11 +306,22 @@ $(function () {
 			});
 		});
 	};
+	var refreshAssocDownloads = function() {
+		return new Promise((resolve, reject) => {
+			getAssociatedDownloads().then((data) => {
+				assocDownloads = data.downloads;
+				resolve();
+			});
+		});
+	};
 	var isMovieInWatchlist = function(imdb_code) {
 		return history.watchlist.indexOf(imdb_code) !== -1;
 	};
 	var isMovieInWatched = function(imdb_code) {
 		return history.watched.indexOf(imdb_code) !== -1;
+	};
+	var isMovieInDownloads = function(imdb_code) {
+		return assocDownloads.indexOf(imdb_code) !== -1;
 	};
 
 	// Function to generate markup for movie poster item in grid.
@@ -296,6 +337,9 @@ $(function () {
 		var watchlist_hash = "#add_to_watchlist?" + $.param({
 			"id": on.imdb_code
 		});
+		var associate_hash = '#associate_imdb?' + $.param({
+			"id": on.imdb_code
+		});
 		var anc = $('<a class="grid-cell" href="' + new_hash + '"></a>');
 		anc.append('<img class="grid-img" src="' + on.cover_image + '" />');
 		anc.append('<span class="grid-overlay"></span>');
@@ -305,7 +349,7 @@ $(function () {
 			"HD": 2,
 			"1080p": 3,
 			"720p": 4
-		}
+		};
 		var qualities = on.sources.map((x) => x.quality).sort((a, b) => {
 			var x = sort_order[a], y = sort_order[b];
 			return (y - x);
@@ -322,7 +366,7 @@ $(function () {
 			anc.append($('<span class="grid-button-right"><a href="' + hide_hash + '" class="btn btn-danger"><span class="glyphicon glyphicon-remove"></span></a></span>'));
 		}
 		if(isMovieInWatchlist(on.imdb_code)){
-			anc.append($('<a class="top-left-corner btn btn-info"><span class="glyphicon glyphicon-th-list"></span></a>'));
+			anc.append($('<a class="bottom-right-corner btn btn-info"><span class="glyphicon glyphicon-th-list"></span></a>'));
 		}
 		if(isMovieInWatched(on.imdb_code)){
 			anc.append($('<a class="top-right-corner btn btn-success"><span class="glyphicon glyphicon-check"></span></a>'));
@@ -330,6 +374,11 @@ $(function () {
 		} else {
 			anc.append($('<span class="grid-button-bottom-left"><a href="' + watched_hash + '" class="btn btn-success"><span class="glyphicon glyphicon-check"></span></a></span>'));
 			anc.append($('<span class="grid-button-bottom-right"><a href="' + watchlist_hash + '" class="btn btn-primary"><span class="glyphicon glyphicon-th-list"></span></a></span>'));
+		}
+		if(isMovieInDownloads(on.imdb_code)) {
+			anc.append($('<a class="top-left-corner-badge btn btn-warning"><span class="glyphicon glyphicon-floppy-saved"></span></a>'));
+		} else {
+			anc.append($('<span class="top-left-corner"><a href="' + associate_hash + '" class="btn btn-warning"><span class="glyphicon glyphicon-random"></span></a></span>'));
 		}
 		li.append(anc);
 		return li;
@@ -359,7 +408,10 @@ $(function () {
 		var rowNumElements = Math.round($(window).width() / $(allItems[0]).width());
 		for(var i = 0; i < allItems.length; i += rowNumElements){
 			var slice = allItems.slice(i, i + rowNumElements);
-			var heights = slice.map(x => x.offsetHeight).filter(x => x > 0);
+			var heights = slice
+				.filter(x => $(x).find("img").attr('src') !== "N/A")
+				.map(x => x.offsetHeight)
+				.filter(x => x > 250);
 			// console.log(heights);
 			var minHeight = Math.min(...heights);
 			// console.log(minHeight);
@@ -370,9 +422,7 @@ $(function () {
 		$('.loader').hide();
 	};
 	var resizeWhenLoaded = function() {
-		imagesLoaded( document.querySelector('.grid-item'), function( instance ) {
-			resizeAllGridItems();
-		});
+		resizeAllGridItems();
 	};
 	window.addEventListener("resize", resizeAllGridItems);
 	/*
@@ -394,7 +444,13 @@ $(function () {
 	// Populate grid with top movies by default, or requested movies if search term exists.
 	var onHomepage = false, autoPopulationCounter = 0;
 	var customRefreshTitle, customRefreshMessage, customRefreshTimer = 2000;
-	var populateGrid = (callback, limit) => {
+	var populateGrid = (callback, limit, doneRefreshingDownloads) => {
+		if(!doneRefreshingDownloads){
+			refreshAssocDownloads().then(() => {
+				populateGrid(callback, limit, /*doneRefreshingDownloads=*/true);
+			});
+			return;
+		}
 		onHomepage = (callback === getRecommendedMovies); // for auto-population
 		autoPopulationCounter = 0; // reset auto-population counter
 		$('.loader').show();
@@ -576,7 +632,7 @@ $(function () {
 		var json_str = JSON.stringify(obj);
 		var contentWin = $('#frameModal').find("iframe").get(0).contentWindow;
 		contentWin.postMessage(json_str, "*");
-	}
+	};
 	var retrieveFileObj = function(folder_id) {
 		return new Promise((resolve, reject) => {
 			apiReq("oauthApiCall", {
@@ -733,9 +789,17 @@ $(function () {
 				for(var item of downloads) {
 					var tr = $('<tr></tr>');
 					var download_done = !item.progress;
+					var title_inside = "<i>(not associated)</i>";
+					var title_col_width = 75;
+					if(item.resolved){
+						title_col_width = 175;
+						// title_inside = `<img src="${item.cover_image}"></img><caption>${item.title}</caption>`;
+						title_inside = `<img src="${item.resolved.cover_image}" style="width: 100%;">`;
+					}
+					tr.append($('<td style="max-width:125px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + title_inside + '</td>'));
 					var col_width = (download_done ? 175 : 75);
 					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
-					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.resolved ? item.resolved.title : "(N/A)") + '</td>'));
+					tr.append($('<td style="max-width:' + title_col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.resolved ? item.resolved.title : "<i>(not associated)</i>") + '</td>'));
 					if(item.progress){
 						keep_running = true;
 						var prog = parseFloat(item.progress).toFixed(2);
@@ -766,7 +830,7 @@ $(function () {
 							buttons.push('<a href="#" class="btn btn-primary" role="button" id="' + download_btn_id + '">Download from Cloud <span class="glyphicon glyphicon-download-alt"></span></a>');
 							buttons.push('<a href="#" class="btn btn-danger" role="button" id="' + delete_btn_id + '">Delete from Cloud <span class="glyphicon glyphicon-trash"></span></a>');
 						}
-						tr.append($(`<td>${buttons.join("&nbsp;")}</td>`));
+						tr.append($(`<td>${buttons.join("<br /><br />")}</td>`));
 						tr.find(".btn-primary").click(function(folder_id) {
 							return function() {
 								$('.loader').show();
@@ -809,8 +873,10 @@ $(function () {
 					else if(item.isDownloadingClient) currentStatus = "Client is downloading";
 					else if(item.isUploadingClient) currentStatus = "Client is uploading";
 					else if(item.hasUploadedClient) currentStatus = "In iCloud Drive";
+					else if(item.hasDownloadedClient) currentStatus = "Only in Disk"
 					else if(item.hasDownloadedCloud) currentStatus = "Only in Cloud";
 					tr.append(`<td class="h5">${currentStatus}</td>`);
+					tr.find("td").css('vertical-align', 'middle');
 					tbody.append(tr);
 				}
 				apiReq("oauthQuery", {
@@ -857,6 +923,24 @@ $(function () {
 					"allowFullScreen": true
 				});
 			});
+		} else if(hash === "associate_imdb"){
+			$('.loader').show();
+			resolveItem(params.id).then((on) => {
+				getDownloads().then((downloads) => {
+					console.log(on);
+					$('.loader').hide();
+					currentItem = {
+						item: on,
+						downloads: downloads
+					};
+
+					// Initialize frame.
+					openPage({
+						"path": "/static/quality.html#downloads",
+						"allowFullScreen": false
+					});
+				});
+			});
 		}
 
 		// Mark done by resetting window.location.hash
@@ -895,10 +979,36 @@ $(function () {
 					});
 				}
 			});
+		} else if(type === "associate_select") {
+			$('#frameModal').modal('hide');
+			$('.loader').show();
+			associateItem(data).then((data) => {
+				console.log("associate result:", data);
+				$('.loader').hide();
+				if(data.result !== true){
+					swal({
+						title: "Unable to associate item",
+						icon: "error"
+					});
+				} else {
+					swal({
+						title: "Item successfully associated",
+						text: "Successfully associated item.",
+						icon: "success",
+						buttons: false,
+						timer: 2000
+					}).then(() => {
+						window.history.pushState(null, null, '#view_downloads');
+						$(window).trigger('hashchange');
+					});
+				}
+			});
 		} else if(type === "watch_window_open"){
 			sendFrameMessage({
 				url: lastDownloadedUrl
 			});
+		} else if(type === "associate_window_open"){
+			sendFrameMessage(currentItem);
 		}
 	}, false);
 

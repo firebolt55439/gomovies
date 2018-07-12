@@ -15,6 +15,8 @@ type Configuration struct {
 	ClientTimeoutSeconds int `json:"client_timeout_seconds"`
 	ClientMaxRetries int `json:"client_max_retries"`
 	ClientConcurrency int `json:"client_concurrency"`
+
+	ICloudDriveFolder string `json:"icloud_drive_folder"`
 	
 	TraktBaseUrl string `json:"trakt_base_url"`
 	TraktClientId string `json:"trakt_client_id"`

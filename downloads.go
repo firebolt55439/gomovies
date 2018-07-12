@@ -5,17 +5,33 @@ import (
 	"time"
 	"strconv"
 	"sort"
+	"io/ioutil"
+	"encoding/json"
+	"log"
+	"path/filepath"
+	"strings"
+	"os"
 )
 
-// TODO: Persist download tags using disk
+const (
+	DISK_SAVE_FILENAME = "downloads.json"
+)
+
+type DiskDownloadItem struct {
+	ImdbID string `json:"imdb_id"`
+	Filename string `json:"filename,omitempty"` /* filename */
+	Source string `json:"source"` /* type of source (e.g. "oauth", "disk", etc.) */
+	Size int64 `json:"size"` /* size of item */
+	CloudID string `json:"id"` /* cloud item id, either iCloud Drive or cloud, if/a */
+}
 
 type DownloadItem struct {
-	Imdb_id string `json:"imdb_id"`
+	ImdbID string `json:"imdb_id"`
 	Source string `json:"source"` /* "disk", "oauth", etc. */
 	Name string `json:"name"` /* name of item */
-	Cloud_id string `json:"id"` /* oauth cloud item id, if/a */
+	CloudID string `json:"id"` /* cloud item id, either iCloud Drive or cloud, if/a */
 	Progress float64 `json:"progress,omitempty"` /* progress of current operation */
-	Time_started int64 `json:"time_started,omitempty"` /* unix timestamp in seconds of start time, if/a */
+	TimeStarted int64 `json:"time_started,omitempty"` /* unix timestamp in seconds of start time, if/a */
 	Size int64 `json:"size"` /* size of file, -1 if unknown */
 
 	IsDownloadingCloud bool `json:"isDownloadingCloud"` /* true if cloud is downloading item */
@@ -28,14 +44,175 @@ type DownloadItem struct {
 	HasUploadedClient bool `json:"hasUploadedClient"` /* true if client has uploaded item */
 }
 
-type DownloadsInterface interface {
-	RetrieveDownloads() ([]DownloadItem)
-	RegisterOAuthDownloadStart(imdb_id string, cloud_id string, name string) (error)
-	RefreshDownloadStates(states []interface{}) (error)
-}
-
 type Downloads struct {
 	pool []*DownloadItem
+}
+
+func Filter(vs []*DownloadItem, f func(*DownloadItem) bool) []*DownloadItem {
+    vsf := make([]*DownloadItem, 0)
+    for _, v := range vs {
+        if f(v) {
+            vsf = append(vsf, v)
+        }
+    }
+    return vsf
+}
+
+func (dl *Downloads) GetAssociatedDownloads() ([]string) {
+	ret := make([]string, 0)
+	arr := Filter(dl.pool, func(v *DownloadItem) bool {
+		return len(v.ImdbID) > 0
+	})
+	for _, on := range arr {
+		ret = append(ret, on.ImdbID)
+	}
+	return ret
+}
+
+func (dl *Downloads) RefreshDiskDownloads() {
+	/* Generate cloud id to imdb id mapping for current disk downloads */
+	cloudToImdb := make(map[string]string)
+	for _, on := range dl.pool {
+		if on.Source != "disk" {
+			continue
+		}
+		cloudToImdb[on.CloudID] = on.ImdbID
+	}
+
+	/* Walk iCloud drive directory */
+	var toAdd []*DownloadItem
+	filepath.Walk(configuration.ICloudDriveFolder, func(path string, f os.FileInfo, err error) error {
+		/* Ignore non-video files */
+		if !strings.Contains(path, ".mp4") {
+			return nil
+		}
+
+		/* Get file size */
+		fi, e := os.Stat(path)
+		if e != nil {
+			return nil
+		}
+		size := fi.Size()
+
+		/* Get filename from path */
+		file_components := strings.Split(path, "/")
+		filename := file_components[len(file_components) - 1]
+		if strings.HasSuffix(filename, ".icloud") {
+			filename = filename[1:strings.Index(filename, ".icloud")]
+			size = -1
+		}
+
+		/* Check if uploading to iCloud or not and retrieve progress */
+		// progress := -1.0
+		isUploadingClient := false
+		hasUploadedClient := false
+
+		/* Get current IMDb ID, if possible */
+		cloud_id := "icloud_" + path
+		var imdb_id string
+		if cur_id, ok := cloudToImdb[cloud_id]; ok {
+			imdb_id = cur_id
+		}
+
+		/* Add item */
+		item := &DownloadItem{
+			Source: "disk",
+			Name: filename,
+			CloudID: cloud_id,
+			ImdbID: imdb_id,
+			Size: size,
+			// Progress: progress,
+			IsDownloadingCloud: false,
+			HasDownloadedCloud: false,
+			IsDownloadingClient: false,
+			HasDownloadedClient: true,
+			IsUploadingClient: isUploadingClient,
+			HasUploadedClient: hasUploadedClient,
+		}
+		toAdd = append(toAdd, item)
+		return nil
+	})
+
+	/* Update pool */
+	dl.pool = Filter(dl.pool, func(v *DownloadItem) bool {
+		return v.Source != "disk"
+	})
+	dl.pool = append(dl.pool, toAdd...)
+}
+
+func (dl *Downloads) ReadFromDisk() {
+	/* Read iCloud Drive files from disk */
+	dl.RefreshDiskDownloads()
+
+	/* Read saved JSON file */
+	content, err := ioutil.ReadFile(DISK_SAVE_FILENAME)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	var savedArr []DiskDownloadItem
+	json.Unmarshal(content, &savedArr)
+
+	/* Restore OAuth items */
+	for _, on := range savedArr {
+		if on.Source != "oauth" {
+			continue
+		}
+		dl.pool = append(dl.pool, &DownloadItem{
+			ImdbID: on.ImdbID,
+			Source: "oauth",
+			CloudID: on.CloudID,
+			Name: on.Filename,
+			Size: on.Size,
+			IsDownloadingCloud: false,
+			HasDownloadedCloud: true,
+			IsDownloadingClient: false,
+			HasDownloadedClient: false,
+			IsUploadingClient: false,
+			HasUploadedClient: false,
+		})
+	}
+
+	/* Restore iCloud Drive associations */
+	for _, on := range savedArr {
+		if on.Source != "disk" {
+			continue
+		}
+		for _, at := range dl.pool {
+			if at.CloudID == on.CloudID {
+				at.ImdbID = on.ImdbID
+			}
+		}
+	}
+}
+
+func (dl *Downloads) SaveToDisk() (error) {
+	assoc := 0
+	unassoc := 0
+	var err error = nil
+	var arr []DiskDownloadItem
+	for _, on := range dl.pool {
+		if len(on.ImdbID) == 0 {
+			unassoc += 1
+		} else {
+			assoc += 1
+		}
+		obj := DiskDownloadItem{
+			ImdbID: on.ImdbID,
+			Filename: on.Name,
+			Source: on.Source,
+			Size: on.Size,
+			CloudID: on.CloudID,
+		}
+		arr = append(arr, obj)
+	}
+	fmt.Printf("%d download(s) currently in pool (%d assoc., %d unassoc.)\n", len(dl.pool), assoc, unassoc)
+	pool_json, err := json.Marshal(arr)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(DISK_SAVE_FILENAME, pool_json, 0644)
+	return err
 }
 
 func (dl *Downloads) RetrieveDownloads() ([]DownloadItem) {
@@ -46,16 +223,28 @@ func (dl *Downloads) RetrieveDownloads() ([]DownloadItem) {
 	return pool
 }
 
+func (dl *Downloads) AssociateDownloadWithImdb(download_id string, imdb_id string) (bool) {
+	for _, on := range dl.pool {
+		if on.CloudID == download_id {
+			on.ImdbID = imdb_id
+			fmt.Println("associated", on)
+			dl.SaveToDisk()
+			return true
+		}
+	}
+	return false
+}
+
 func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string, name string) (error) {
 	var err error = nil
 	dl.pool = append(dl.pool, &DownloadItem{
-		Imdb_id: imdb_id,
+		ImdbID: imdb_id,
 		Source: "oauth",
-		Cloud_id: cloud_id,
+		CloudID: cloud_id,
 		Name: name,
 		Progress: -1.0,
 		Size: -1,
-		Time_started: time.Now().Unix(),
+		TimeStarted: time.Now().Unix(),
 		IsDownloadingCloud: true,
 		HasDownloadedCloud: false,
 		IsDownloadingClient: false,
@@ -63,6 +252,7 @@ func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string,
 		IsUploadingClient: false,
 		HasUploadedClient: false,
 	})
+	dl.SaveToDisk()
 	return err
 }
 
@@ -83,10 +273,10 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 		id := strconv.Itoa(int(on["id"].(float64)))
 		updatedIds = append(updatedIds, id)
 		foundItem := &DownloadItem{
-			Imdb_id: "",
+			ImdbID: "",
 			Source: "oauth",
 			Name: on["name"].(string),
-			Cloud_id: id,
+			CloudID: id,
 			Size: -1,
 			IsDownloadingCloud: false,
 			HasDownloadedCloud: false,
@@ -97,7 +287,7 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 		}
 		didFindItem := false
 		for _, tmp := range dl.pool {
-			if tmp.Source == "oauth" && tmp.Cloud_id == id {
+			if tmp.Source == "oauth" && tmp.CloudID == id {
 				foundItem = tmp
 				didFindItem = true
 				break
@@ -111,14 +301,14 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 			foundItem.IsDownloadingCloud = false
 			foundItem.HasDownloadedCloud = true
 		}
-		foundItem.Size, _ = on["size"].(int64)
+		foundItem.Size = int64(on["size"].(float64))
 		if !didFindItem {
 			dl.pool = append(dl.pool, foundItem)
 		}
 	}
 	var derelictItems []int
 	for i, on := range dl.pool {
-		if on.Source == "oauth" && !contains(updatedIds, on.Cloud_id) {
+		if on.Source == "oauth" && !contains(updatedIds, on.CloudID) {
 			derelictItems = append(derelictItems, i)
 		}
 	}
@@ -126,7 +316,7 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 	for _, on := range derelictItems {
 		dl.pool = append(dl.pool[:on], dl.pool[on+1:]...)
 	}
-	fmt.Printf("%d download(s) in pool currently\n", len(dl.pool))
+	dl.SaveToDisk()
 	return err
 }
 

@@ -173,11 +173,8 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			fmt.Println(string(tmp_j))
 			return outp, err
 		case "getDownloads":
-			// TODO: Start keeping track of IMDB id's along with downloads and other metadata
-			// metadata: start time of download, IMDB id
 			// TODO: Check if in iCloud drive or not
 			// TODO: Allow downloading in background
-			// TODO: Refresh oauth download states
 			/* Retrieve main folder */
 			res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
 			if err != nil {
@@ -199,6 +196,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 
 			/* Refresh and process current download states */
 			downloadPool.RefreshDownloadStates(list)
+			downloadPool.RefreshDiskDownloads()
 
 			/* Retrieve all downloads from pool */
 			download_list := downloadPool.RetrieveDownloads()
@@ -207,6 +205,18 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			return map[string]interface{}{
 				"downloads": download_list,
 			}, err
+		case "getAssociatedDownloads":
+			return map[string]interface{}{
+				"downloads": downloadPool.GetAssociatedDownloads(),
+			}, /*err=*/nil
+		case "associateDownload":
+			res := downloadPool.AssociateDownloadWithImdb(
+				req_data["cloud_id"].(string),
+				req_data["imdb_id"].(string),
+			)
+			return map[string]interface{}{
+				"result": res,
+			}, /*err=*/nil
 		case "getRecommendedMovies":
 			extension, ok := req_data["extended"].(string)
 			if !ok {

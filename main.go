@@ -71,6 +71,9 @@ func main() {
 		nil,
 	)
 
+	/* Initialize downloads */
+	downloadPool.ReadFromDisk()
+
 	/* Initialize microservices */
 	logger = log.NewLogfmtLogger(os.Stderr)
 	logger = log.With(logger, "listen", *listen, "caller", log.DefaultCaller)
