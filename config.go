@@ -28,6 +28,7 @@ type Configuration struct {
 	DownloadUriOauthParam string `json:"download_uri_oauth_param"`
 	OauthDownloadingPath string `json:"oauth_downloading_path"`
 	CloudItemIdKey string `json:"cloud_item_id_key"`
+	CloudHashIdKey string `json:"cloud_hash_id_key"`
 	
 	TitleQualityHDKeywords []string `mapstructure:"hd_titles"`
 

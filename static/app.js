@@ -391,6 +391,7 @@ $(function () {
 		var allItems = Array.from(document.getElementsByClassName("grid-item"));
 		if(allItems
 			.filter(x => Array.from(document.getElementsByClassName("grid-item-blank")).indexOf(x) === -1)
+			.filter(x => $(x).find("img").attr('src') !== "N/A" && $(x).find("img").attr('src').length > 0)
 			.map(x => x.clientHeight)
 			.filter(x => x == 0)
 			.length > 0
@@ -401,7 +402,7 @@ $(function () {
 		for(var i = 0; i < allItems.length; i += rowNumElements){
 			var slice = allItems.slice(i, i + rowNumElements);
 			var heights = slice
-				.filter(x => $(x).find("img").attr('src') !== "N/A")
+				.filter(x => $(x).find("img").attr('src') !== "N/A" && $(x).find("img").attr('src').length > 0)
 				.map(x => x.offsetHeight)
 				.filter(x => x > 250);
 			// console.log(heights);

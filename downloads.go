@@ -29,7 +29,7 @@ type DownloadItem struct {
 	ImdbID string `json:"imdb_id"`
 	Source string `json:"source"` /* "disk", "oauth", etc. */
 	Name string `json:"name"` /* name of item */
-	CloudID string `json:"id"` /* cloud item id, either iCloud Drive or cloud, if/a */
+	CloudID string `json:"id"` /* cloud item id, either iCloud Drive or cloud */
 	Progress float64 `json:"progress,omitempty"` /* progress of current operation */
 	TimeStarted int64 `json:"time_started,omitempty"` /* unix timestamp in seconds of start time, if/a */
 	Size int64 `json:"size"` /* size of file, -1 if unknown */
@@ -103,6 +103,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 		}
 
 		/* Check if uploading to iCloud or not and retrieve progress */
+		// TODO: Finish implementing
 		// progress := -1.0
 		isUploadingClient := false
 		hasUploadedClient := false
@@ -235,14 +236,14 @@ func (dl *Downloads) AssociateDownloadWithImdb(download_id string, imdb_id strin
 	return false
 }
 
-func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string, name string) (error) {
+func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string, hash_id string, name string) (error) {
+	/* Prepend download to beginning of pool so it appears first */
 	var err error = nil
-	dl.pool = append(dl.pool, &DownloadItem{
+	dl.pool = append([]*DownloadItem{&DownloadItem{
 		ImdbID: imdb_id,
 		Source: "oauth",
 		CloudID: cloud_id,
 		Name: name,
-		Progress: -1.0,
 		Size: -1,
 		TimeStarted: time.Now().Unix(),
 		IsDownloadingCloud: true,
@@ -251,7 +252,7 @@ func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string,
 		HasDownloadedClient: false,
 		IsUploadingClient: false,
 		HasUploadedClient: false,
-	})
+	}}, dl.pool...)
 	dl.SaveToDisk()
 	return err
 }
@@ -270,7 +271,7 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 	var updatedIds []string
 	for _, on_m := range states {
 		on := on_m.(map[string]interface{})
-		id := strconv.Itoa(int(on["id"].(float64)))
+		id := fmt.Sprintf("%.0f", on["id"].(float64))
 		updatedIds = append(updatedIds, id)
 		foundItem := &DownloadItem{
 			ImdbID: "",
@@ -287,12 +288,13 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 		}
 		didFindItem := false
 		for _, tmp := range dl.pool {
-			if tmp.Source == "oauth" && tmp.CloudID == id {
+			if tmp.Source == "oauth" && (tmp.CloudID == id || tmp.Name == on["name"].(string)) {
 				foundItem = tmp
 				didFindItem = true
 				break
 			}
 		}
+		foundItem.CloudID = id
 		if tmp_prog, ok := on["progress"]; ok {
 			foundItem.Progress, _ = strconv.ParseFloat(tmp_prog.(string), /*bitsize=*/64)
 			foundItem.IsDownloadingCloud = true

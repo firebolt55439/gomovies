@@ -168,7 +168,12 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				}
 				fmt.Println("retried:", outp)
 			}
-			downloadPool.RegisterOAuthDownloadStart(req_data["imdb_id"].(string), outp[configuration.CloudItemIdKey].(string), outp["title"].(string))
+			downloadPool.RegisterOAuthDownloadStart(
+				req_data["imdb_id"].(string),
+				fmt.Sprintf("%.0f", outp[configuration.CloudItemIdKey].(float64)),
+				outp[configuration.CloudHashIdKey].(string),
+				outp["title"].(string),
+			)
 			tmp_j, _ := json.Marshal(outp)
 			fmt.Println(string(tmp_j))
 			return outp, err
