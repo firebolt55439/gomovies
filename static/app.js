@@ -355,31 +355,23 @@ $(function () {
 			return (y - x);
 		});
 		qualities = qualities.filter((x, i) => qualities.indexOf(x) === i); // remove duplicates
-		desc = on.title + " <br /> " + desc.concat(qualities).join(" | ");
+		desc = on.title + " <br /> " + desc + "<br />" + qualities.join(" | ");
 		var grid_span = $('<span class="grid-text"></span>');
 		grid_span.html(desc);
 		anc.append(grid_span);
-		if(on.recommendation){
-			var hide_hash = "#hide_recommendation?" + $.param({
-				"obj": JSON.stringify(on.recommendation)
-			});
-			anc.append($('<span class="grid-button-right"><a href="' + hide_hash + '" class="btn btn-danger"><span class="glyphicon glyphicon-remove"></span></a></span>'));
-		}
 		if(isMovieInWatchlist(on.imdb_code)){
-			anc.append($('<a class="bottom-right-corner btn btn-info"><span class="glyphicon glyphicon-th-list"></span></a>'));
+			anc.append($('<a class="bottom-right-corner btn btn-warning"><span class="glyphicon glyphicon-th-list"></span></a>'));
 		}
 		if(isMovieInWatched(on.imdb_code)){
 			anc.append($('<a class="top-right-corner btn btn-success"><span class="glyphicon glyphicon-check"></span></a>'));
-			anc.append($('<span class="grid-button-bottom-left"><a href="' + watched_hash + '" class="btn btn-info"><span class="glyphicon glyphicon-check"></span></a></span>'));
 		} else {
-			anc.append($('<span class="grid-button-bottom-left"><a href="' + watched_hash + '" class="btn btn-success"><span class="glyphicon glyphicon-check"></span></a></span>'));
-			anc.append($('<span class="grid-button-bottom-right"><a href="' + watchlist_hash + '" class="btn btn-primary"><span class="glyphicon glyphicon-th-list"></span></a></span>'));
+			anc.append($('<span class="grid-button-bottom-right"><a href="' + watchlist_hash + '" class="btn btn-warning"><span class="glyphicon glyphicon-th-list"></span></a></span>'));
 		}
+		anc.append($('<span class="grid-button-bottom-left"><a href="' + watched_hash + '" class="btn btn-success"><span class="glyphicon glyphicon-check"></span></a></span>'));
 		if(isMovieInDownloads(on.imdb_code)) {
-			anc.append($('<a class="top-left-corner-badge btn btn-warning"><span class="glyphicon glyphicon-floppy-saved"></span></a>'));
-		} else {
-			anc.append($('<span class="top-left-corner"><a href="' + associate_hash + '" class="btn btn-warning"><span class="glyphicon glyphicon-random"></span></a></span>'));
+			anc.append($('<a class="top-left-corner-badge btn btn-info"><span class="glyphicon glyphicon-floppy-saved"></span></a>'));
 		}
+		anc.append($('<span class="top-left-corner"><a href="' + associate_hash + '" class="btn btn-info"><span class="glyphicon glyphicon-random"></span></a></span>'));
 		li.append(anc);
 		return li;
 	};
