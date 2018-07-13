@@ -177,6 +177,59 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			tmp_j, _ := json.Marshal(outp)
 			fmt.Println(string(tmp_j))
 			return outp, err
+		case "startBackgroundDownload":
+			cloud_id := req_data["id"].(string)
+			dl_url := req_data["uri"].(string)
+			filename := req_data["filename"].(string)
+			err := downloadPool.StartBackgroundDownload(dl_url, cloud_id, filename)
+			if err != nil {
+				return map[string]interface{}{
+					"result": false,
+					"err": err.Error(),
+				}, nil
+			}
+			return map[string]interface{}{
+				"result": true,
+			}, /*err=*/nil
+		case "evictLocalItem":
+			cloud_id := req_data["id"].(string)
+			err := downloadPool.EvictLocalItem(cloud_id)
+			if err != nil {
+				return map[string]interface{}{
+					"result": false,
+					"err": err.Error(),
+				}, nil
+			}
+			return map[string]interface{}{
+				"result": true,
+			}, /*err=*/nil
+		case "intelligentRenameItem":
+			cloud_id := req_data["id"].(string)
+			item_title := req_data["title"].(string)
+			new_name, err := downloadPool.IntelligentRenameItem(cloud_id, item_title)
+			if err != nil {
+				return map[string]interface{}{
+					"result": false,
+					"err": err.Error(),
+				}, nil
+			}
+			return map[string]interface{}{
+				"result": true,
+				"new_name": new_name,
+			}, /*err=*/nil
+		case "getiCloudStreamUrl":
+			cloud_id := req_data["id"].(string)
+			url, err := downloadPool.GetiCloudStreamUrl(cloud_id)
+			if err != nil {
+				return map[string]interface{}{
+					"result": false,
+					"err": err.Error(),
+				}, nil
+			}
+			return map[string]interface{}{
+				"result": true,
+				"url": url,
+			}, /*err=*/nil
 		case "getDownloads":
 			// TODO: Check if in iCloud drive or not
 			// TODO: Allow downloading in background

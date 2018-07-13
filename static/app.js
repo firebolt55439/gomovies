@@ -227,6 +227,49 @@ function associateItem(info) {
 	});
 }
 
+function downloadItemInBackground(info) {
+	return new Promise((resolve, reject) => {
+		apiReq("startBackgroundDownload", {
+			"id": info.cloud_id.toString(),
+			"uri": info.uri,
+			"filename": info.filename
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function evictLocalItem(cloud_id) {
+	return new Promise((resolve, reject) => {
+		apiReq("evictLocalItem", {
+			"id": cloud_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function intelligentRenameItem(info) {
+	return new Promise((resolve, reject) => {
+		apiReq("intelligentRenameItem", {
+			"id": info.id,
+			"title": info.title
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function iCloudStreamUrl(cloud_id) {
+	return new Promise((resolve, reject) => {
+		apiReq("getiCloudStreamUrl", {
+			"id": cloud_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 function getAssociatedDownloads() {
 	return new Promise((resolve, reject) => {
 		apiReq("getAssociatedDownloads", {}, function(data) {
@@ -253,7 +296,7 @@ function getDownloads() {
 					for (var i = ret.length - 1; i >= 0; i--) {
 						if(ret[i].imdb_id === on){
 							ret[i].resolved = item;
-							break;
+							// no break statement since multiple downloads with same IMDb ID are possible
 						}
 					}
 				}
@@ -391,7 +434,7 @@ $(function () {
 		var allItems = Array.from(document.getElementsByClassName("grid-item"));
 		if(allItems
 			.filter(x => Array.from(document.getElementsByClassName("grid-item-blank")).indexOf(x) === -1)
-			.filter(x => $(x).find("img").attr('src') !== "N/A" && $(x).find("img").attr('src').length > 0)
+			.filter(x => $(x).find("img").attr('src') !== "N/A" && ($(x).find("img").attr('src') || "").length > 0)
 			.map(x => x.clientHeight)
 			.filter(x => x == 0)
 			.length > 0
@@ -402,7 +445,7 @@ $(function () {
 		for(var i = 0; i < allItems.length; i += rowNumElements){
 			var slice = allItems.slice(i, i + rowNumElements);
 			var heights = slice
-				.filter(x => $(x).find("img").attr('src') !== "N/A" && $(x).find("img").attr('src').length > 0)
+				.filter(x => $(x).find("img").attr('src') !== "N/A" && ($(x).find("img").attr('src') || "").length > 0)
 				.map(x => x.offsetHeight)
 				.filter(x => x > 250);
 			// console.log(heights);
@@ -779,6 +822,7 @@ $(function () {
 				downloads = downloads || [];
 				console.log("Downloads:", downloads);
 				var keep_running = false;
+				var progressMap = {};
 				for(var item of downloads) {
 					var tr = $('<tr></tr>');
 					var download_done = !item.progress;
@@ -793,7 +837,21 @@ $(function () {
 					var col_width = (download_done ? 175 : 75);
 					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
 					tr.append($('<td style="max-width:' + title_col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.resolved ? item.resolved.title : "<i>(not associated)</i>") + '</td>'));
-					if(item.progress){
+					var inProgress = item.progress !== null && item.progress !== undefined && item.progress != 102.0 && (item.isDownloadingCloud || item.isDownloadingClient);
+					if(item.id in progressMap && progressMap[item.id] && !inProgress){
+						var desc = (item.hasDownloadedClient
+									? `Successfully finished download of '${item.name}' in background.`
+									: `Successfully finished cloud download of '${item.name}'.`);
+						swal({
+							title: "Download complete",
+							text: desc,
+							icon: "success",
+							buttons: false,
+							timer: 3000
+						});
+					}
+					progressMap[item.id] = inProgress;
+					if(inProgress){
 						keep_running = true;
 						var prog = parseFloat(item.progress).toFixed(2);
 						var desc = prog + "%";
@@ -804,39 +862,119 @@ $(function () {
 							prog = 100.0;
 							desc = "Copying to folder...";
 						}
-						tr.append($('<td><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%;">' + desc + '</div></td>'));
+						tr.append($('<td><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%; min-width: 15%;">' + desc + '</div></td>'));
 					} else {
 						var watch_hash = '#watch_download?' + $.param({
 							"folder_id": item.id
 						});
-						var watch_hash_icloud = '#watch_download?' + $.param({
+						var watch_hash_icloud = '#watch_icloud?' + $.param({
 							"icloud_id": item.id
 						});
-						var download_btn_id = 'download-btn-' + item.id;
-						var delete_btn_id = 'delete-btn-' + item.id;
 						var buttons = [];
 						if(item.hasUploadedClient){
-							buttons.push('<a href="' + watch_hash + '" class="btn btn-success">Stream from iCloud <span class="glyphicon glyphicon-film"></span></a>');
+							buttons.push('<a href="' + watch_hash_icloud + '" class="btn btn-success">Stream from iCloud <span class="glyphicon glyphicon-film"></span></a>');
+						} else if(item.hasDownloadedClient){
+							buttons.push('<a href="#" class="btn btn-danger btn-evict-local" role="button">Move to iCloud <span class="glyphicon glyphicon-cloud-upload"></span></a>');
+							buttons.push('<a href="#" class="btn btn-info btn-rename-local" role="button">Intelligent Rename <span class="glyphicon glyphicon-edit"></span></a>');
 						}
-						if(item.source === "oauth"){
+						if(item.source === "oauth" && item.hasDownloadedCloud){
 							buttons.push('<a href="' + watch_hash + '" class="btn btn-success">Watch in Cloud <span class="glyphicon glyphicon-film"></span></a>');
-							buttons.push('<a href="#" class="btn btn-primary" role="button" id="' + download_btn_id + '">Download from Cloud <span class="glyphicon glyphicon-download-alt"></span></a>');
-							buttons.push('<a href="#" class="btn btn-danger" role="button" id="' + delete_btn_id + '">Delete from Cloud <span class="glyphicon glyphicon-trash"></span></a>');
+							buttons.push('<a href="#" class="btn btn-primary btn-dl-background" role="button">Download in Background <span class="glyphicon glyphicon-download-alt"></span></a>');
+							buttons.push('<a href="#" class="btn btn-danger btn-delete-cloud" role="button">Delete from Cloud <span class="glyphicon glyphicon-trash"></span></a>');
 						}
 						tr.append($(`<td>${buttons.join("<br /><br />")}</td>`));
-						tr.find(".btn-primary").click(function(folder_id) {
+						tr.find(".btn-evict-local").click(function(folder_id) {
+							return function() {
+								$('.loader').show();
+								evictLocalItem(folder_id).then((data) => {
+									$('.loader').hide();
+									if(data.result !== true){
+										swal({
+											title: "Unable to move item to iCloud",
+											text: data.err,
+											icon: "error"
+										});
+									} else {
+										swal({
+											title: "Moved to iCloud",
+											text: "Successfully moved item to iCloud.",
+											icon: "success",
+											buttons: false,
+											timer: 3000
+										}).then(() => {
+											window.history.pushState(null, null, '#view_downloads');
+											$(window).trigger('hashchange');
+										});
+									}
+								});
+							};
+						}(item.id));
+						tr.find(".btn-rename-local").click(function(item) {
+							return function() {
+								$('.loader').show();
+								intelligentRenameItem({
+									id: item.id,
+									title: item.resolved ? item.resolved.title : "(unassociated)"
+								}).then((data) => {
+									$('.loader').hide();
+									if(data.result !== true){
+										swal({
+											title: "Unable to rename item",
+											text: data.err,
+											icon: "error"
+										});
+									} else {
+										swal({
+											title: "Renamed item",
+											text: `Successfully renamed item to '${data.new_name}'.`,
+											icon: "success",
+											buttons: false,
+											timer: 3000
+										}).then(() => {
+											window.history.pushState(null, null, '#view_downloads');
+											$(window).trigger('hashchange');
+										});
+									}
+								});
+							};
+						}(item))
+						tr.find(".btn-dl-background").click(function(folder_id) {
 							return function() {
 								$('.loader').show();
 								retrieveFileUrl(folder_id, /*should_download=*/true).then((file_data) => {
 									$('.loader').hide();
 									console.log("fetch (dl):", file_data);
 									var url = file_data.url;
-									window.location = url;
-									setTimeout(populateDownloadsHelper, 200);
+									// window.location = url;
+									// setTimeout(populateDownloadsHelper, 200);
+									downloadItemInBackground({
+										cloud_id: folder_id,
+										uri: url,
+										filename: file_data.name
+									}).then((data) => {
+										if(data.result !== true){
+											swal({
+												title: "Unable to download item",
+												text: data.err,
+												icon: "error"
+											});
+										} else {
+											swal({
+												title: "Download has begun",
+												text: "Successfully began download in background.",
+												icon: "success",
+												buttons: false,
+												timer: 3000
+											}).then(() => {
+												window.history.pushState(null, null, '#view_downloads');
+												$(window).trigger('hashchange');
+											});
+										}
+									});
 								});
 							};
 						}(item.id));
-						tr.find(".btn-danger").click(function(folder_id) {
+						tr.find(".btn-delete-cloud").click(function(folder_id) {
 							return function() {
 								$('.loader').show();
 								retrieveFileObj(folder_id).then((file_obj) => {
@@ -849,13 +987,22 @@ $(function () {
 									}, function(res) {
 										console.log("del output:", res);
 										$('.loader').hide();
+										swal({
+											title: "Deleted item",
+											text: "Successfully deleted item.",
+											icon: "success",
+											buttons: false,
+											timer: 3000
+										});
 										setTimeout(populateDownloadsHelper, 200);
 									});
 								});
 							};
 						}(item.id));
 					}
-					if(item.progress){
+					if(!item.imdb_id || item.imdb_id.length == 0){
+						tr.addClass("warning");
+					} else if(inProgress || item.isUploadingClient){
 						tr.addClass("active");
 						tr.find(".progress-bar").addClass("progress-bar-info");
 					} else {
@@ -908,6 +1055,19 @@ $(function () {
 		} else if(hash === "watch_download"){
 			var folder_id = params.folder_id;
 			retrieveFileUrl(folder_id, /*should_download=*/false).then((file_data) => {
+				console.log("fetch:", file_data);
+				var url = file_data.url;
+				lastDownloadedUrl = url;
+				openPage({
+					"path": "/static/watch.html",
+					"allowFullScreen": true
+				});
+			});
+		} else if(hash === "watch_icloud"){
+			var cloud_id = params.icloud_id;
+			$('.loader').show();
+			iCloudStreamUrl(cloud_id).then((file_data) => {
+				$('.loader').hide();
 				console.log("fetch:", file_data);
 				var url = file_data.url;
 				lastDownloadedUrl = url;
@@ -990,10 +1150,10 @@ $(function () {
 						icon: "success",
 						buttons: false,
 						timer: 2000
-					}).then(() => {
+					})/*.then(() => {
 						window.history.pushState(null, null, '#view_downloads');
 						$(window).trigger('hashchange');
-					});
+					})*/;
 				}
 			});
 		} else if(type === "watch_window_open"){

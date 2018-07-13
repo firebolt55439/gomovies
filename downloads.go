@@ -6,11 +6,16 @@ import (
 	"strconv"
 	"sort"
 	"io/ioutil"
+	"io"
 	"encoding/json"
 	"log"
 	"path/filepath"
 	"strings"
 	"os"
+	"os/exec"
+	"errors"
+	"net/http"
+	"bytes"
 )
 
 const (
@@ -30,6 +35,7 @@ type DownloadItem struct {
 	Source string `json:"source"` /* "disk", "oauth", etc. */
 	Name string `json:"name"` /* name of item */
 	CloudID string `json:"id"` /* cloud item id, either iCloud Drive or cloud */
+	LocalPath string `json:"local_path,omitempty"` /* local path of item */
 	Progress float64 `json:"progress,omitempty"` /* progress of current operation */
 	TimeStarted int64 `json:"time_started,omitempty"` /* unix timestamp in seconds of start time, if/a */
 	Size int64 `json:"size"` /* size of file, -1 if unknown */
@@ -94,22 +100,23 @@ func (dl *Downloads) RefreshDiskDownloads() {
 		}
 		size := fi.Size()
 
-		/* Get filename from path */
+		/* Get filename from path and make an educated guess about upload status */
+		isUploadingClient := true
+		hasUploadedClient := false
 		file_components := strings.Split(path, "/")
 		filename := file_components[len(file_components) - 1]
+		cloud_id_path := path
 		if strings.HasSuffix(filename, ".icloud") {
+			isUploadingClient = false
+			hasUploadedClient = true
 			filename = filename[1:strings.Index(filename, ".icloud")]
 			size = -1
+			file_components[len(file_components) - 1] = filename
+			cloud_id_path = strings.Join(file_components, "/")
 		}
 
-		/* Check if uploading to iCloud or not and retrieve progress */
-		// TODO: Finish implementing
-		// progress := -1.0
-		isUploadingClient := false
-		hasUploadedClient := false
-
 		/* Get current IMDb ID, if possible */
-		cloud_id := "icloud_" + path
+		cloud_id := "icloud_" + cloud_id_path
 		var imdb_id string
 		if cur_id, ok := cloudToImdb[cloud_id]; ok {
 			imdb_id = cur_id
@@ -122,6 +129,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 			CloudID: cloud_id,
 			ImdbID: imdb_id,
 			Size: size,
+			LocalPath: path,
 			// Progress: progress,
 			IsDownloadingCloud: false,
 			HasDownloadedCloud: false,
@@ -320,6 +328,265 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 	}
 	dl.SaveToDisk()
 	return err
+}
+
+func (dl *Downloads) monitorDownloadProgress(done chan int64, path string, foundItem *DownloadItem) {
+	/* Monitor download progress */
+	total := foundItem.Size
+	var stop bool = false
+	for {
+		select {
+			case <-done:
+				stop = true
+			default:
+				file, err := os.Open(path)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+
+				fi, err := file.Stat()
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+
+				size := fi.Size()
+
+				if size == 0 {
+					size = 1
+				}
+
+				percent := float64(size) / float64(total) * 100.0
+				foundItem.Progress = percent
+		}
+
+		if stop {
+			break
+		}
+
+		time.Sleep(125 * time.Millisecond)
+	}
+}
+
+func (dl *Downloads) downloadHelper(url string, filename string, foundItem *DownloadItem) {
+	/* Set up download destination */
+	dest_path := fmt.Sprintf("%s/%s", configuration.TemporaryDownloadFolder, filename)
+	out, err := os.Create(dest_path)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer out.Close()
+
+	/* Start monitoring download progress */
+	done := make(chan int64)
+	go dl.monitorDownloadProgress(done, dest_path, foundItem)
+
+	/* Send GET request */
+	fmt.Printf("Starting download at '%s'...\n", url)
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer resp.Body.Close()
+
+	/* Start piping output to disk */
+	n, err := io.Copy(out, resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	/* When done, stop monitoring */
+	fmt.Printf("Done with download (%ld bytes transferred)\n", n)
+	done <- n
+
+	/* Update bool flags */
+	foundItem.IsDownloadingClient = false
+	foundItem.HasDownloadedClient = false // since a separate entry will crop up
+	foundItem.Progress = 102.0
+
+	/* Move file to iCloud drive folder */
+	final_path := fmt.Sprintf("%s/%s", configuration.ICloudDriveFolder, filename)
+	os.Rename(dest_path, final_path)
+	dl.pool = append([]*DownloadItem{&DownloadItem{
+		Source: "disk",
+		Name: filename,
+		CloudID: "icloud_" + final_path,
+		ImdbID: foundItem.ImdbID,
+		Size: foundItem.Size,
+		// Progress: progress,
+		IsDownloadingCloud: false,
+		HasDownloadedCloud: false,
+		IsDownloadingClient: false,
+		HasDownloadedClient: true,
+		IsUploadingClient: true,
+		HasUploadedClient: false,
+	}}, dl.pool...)
+	dl.SaveToDisk()
+}
+
+func (dl *Downloads) StartBackgroundDownload(url, cloud_id, filename string) (error) {
+	/* Find item in pool */
+	var foundItem *DownloadItem = nil
+	for _, on := range dl.pool {
+		if on.CloudID == cloud_id {
+			foundItem = on
+			break
+		}
+	}
+	if foundItem == nil {
+		return errors.New("Could not find item with matching cloud_id")
+	}
+	foundItem.IsDownloadingClient = true
+	foundItem.HasDownloadedClient = false
+	foundItem.Progress = 0.0
+
+	/* Sanitize URL */
+	url = strings.Replace(url, "+", "%20", -1)
+
+	/* Perform an HTTP HEAD request to detect file length */
+	headResp, err := http.Head(url)
+	if err != nil {
+		return err
+	}
+	defer headResp.Body.Close()
+
+	size_int, _ := strconv.Atoi(headResp.Header.Get("Content-Length"))
+	foundItem.Size = int64(size_int)
+
+	/* Start download helper in background */
+	go dl.downloadHelper(url, filename, foundItem)
+
+	return nil
+}
+
+func (dl *Downloads) EvictLocalItem(cloud_id string) (error) {
+	/* Find item in pool */
+	var foundItem *DownloadItem = nil
+	for _, on := range dl.pool {
+		if on.CloudID == cloud_id {
+			foundItem = on
+			break
+		}
+	}
+	if foundItem == nil {
+		return errors.New("Could not find item with matching cloud_id")
+	}
+
+	/* Verify item flags */
+	if !foundItem.HasDownloadedClient {
+		return errors.New("Item is not downloaded on disk")
+	}
+	if foundItem.HasUploadedClient {
+		return errors.New("Item already uploaded to iCloud")
+	}
+	if foundItem.Source == "oauth" {
+		return errors.New("Item not taken from disk")
+	}
+	if len(foundItem.LocalPath) == 0 {
+		return errors.New("No path found in item")
+	}
+
+	/* Execute eviction and return if any error */
+	cmd := exec.Command("brctl", "evict", foundItem.LocalPath)
+	err := cmd.Run()
+	return err
+}
+
+func (dl *Downloads) GetiCloudStreamUrl(cloud_id string) (string, error) {
+	/* Find item in pool */
+	var foundItem *DownloadItem = nil
+	for _, on := range dl.pool {
+		if on.CloudID == cloud_id {
+			foundItem = on
+			break
+		}
+	}
+	if foundItem == nil {
+		return "", errors.New("Could not find item with matching cloud_id")
+	}
+
+	/* Verify item flags */
+	if !foundItem.HasUploadedClient {
+		return "", errors.New("Item not uploaded to iCloud")
+	}
+	if foundItem.Source == "oauth" {
+		return "", errors.New("Item not taken from disk")
+	}
+	if len(foundItem.LocalPath) == 0 {
+		return "", errors.New("No path found in item")
+	}
+
+	/* Execute eviction and return if any error */
+	var out bytes.Buffer
+	cmd := exec.Command("swift", "stream_link.swift", foundItem.LocalPath)
+	cmd.Stdout = &out
+	err := cmd.Run()
+	return out.String(), err
+}
+
+func (dl *Downloads) IntelligentRenameItem(cloud_id, title string) (string, error) {
+	/* Find item in pool */
+	var foundItem *DownloadItem = nil
+	for _, on := range dl.pool {
+		if on.CloudID == cloud_id {
+			foundItem = on
+			break
+		}
+	}
+	if foundItem == nil {
+		return "", errors.New("Could not find item with matching cloud_id")
+	}
+
+	/* Verify item flags */
+	if foundItem.HasUploadedClient {
+		return "", errors.New("Item already uploaded to iCloud")
+	}
+	if !foundItem.HasDownloadedClient {
+		return "", errors.New("Item not downloaded to disk")
+	}
+	if foundItem.Source == "oauth" {
+		return "", errors.New("Item not taken from disk")
+	}
+	if len(foundItem.LocalPath) == 0 {
+		return "", errors.New("No path found in item")
+	}
+	if len(foundItem.ImdbID) == 0 {
+		return "", errors.New("Item is unassociated")
+	}
+
+	/* Generate new name */
+	name_components := strings.Split(foundItem.Name, ".")
+	file_extension := name_components[len(name_components) - 1]
+	new_name := title
+	new_name = strings.Replace(new_name, " ", ".", -1)
+	new_name = strings.Replace(new_name, ":", "", -1)
+	new_name = strings.Replace(new_name, "/", "", -1)
+	new_name = strings.Replace(new_name, "(", "", -1)
+	new_name = strings.Replace(new_name, ")", "", -1)
+	new_name = strings.Replace(new_name, "..", "", -1)
+	new_name += "." + file_extension
+
+	/* Execute rename and return error, if any */
+	path_components := strings.Split(foundItem.LocalPath, "/")
+	path_components[len(path_components) - 1] = new_name
+	final_path := strings.Join(path_components, "/")
+	err := os.Rename(foundItem.LocalPath, final_path)
+	if err != nil {
+		return "", err
+	}
+
+	/* Append filler entry for new path to ensure IMDb ID association is not lost */
+	dl.pool = append(dl.pool, &DownloadItem{
+		Source: "disk",
+		CloudID: "icloud_" + final_path,
+		ImdbID: foundItem.ImdbID,
+		LocalPath: final_path,
+	})
+	return new_name, err
 }
 
 var downloadPool Downloads
