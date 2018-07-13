@@ -77,23 +77,24 @@ func (dl *Downloads) GetAssociatedDownloads() ([]string) {
 	return ret
 }
 
-func (dl *Downloads) ReadiCloudStatus() (map[string]bool, error) {
+func (dl *Downloads) ReadiCloudStatus() (map[string]bool, map[string]int, error) {
 	/* Dump minified cloud database to temporary file */
 	cmd := exec.Command("brctl", "dump", "-i", "-o", "./" + configuration.TemporaryCloudDbFile)
 	err := cmd.Run()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	/* Read temporary file */
 	data_bytes, err := ioutil.ReadFile(configuration.TemporaryCloudDbFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	/* Parse file contents */
 	data := string(data_bytes)
 	ret := make(map[string]bool)
+	size_ret := make(map[string]int)
 	data = strings.Split(data, "----------com.apple.CloudDocs")[2]
 	data = strings.Split(data, "    ----------------------")[0]
 	filename_arr := make([]string, 0)
@@ -103,7 +104,14 @@ func (dl *Downloads) ReadiCloudStatus() (map[string]bool, error) {
 			filename := strings.Split(using_on, "[0;1m")[1]
 			filename = strings.Split(filename, "[0m")[0]
 			filename = filename[:len(filename) - 1]
+
 			filename_arr = append(filename_arr, filename)
+
+			size := strings.Split(on, " sz:")[1]
+			if strings.Contains(size, "(") {
+				size = strings.Split(strings.Split(size, "(")[1], ")")[0]
+				size_ret[filename], _ = strconv.Atoi(size)
+			}
 		}
 
 		if i > 0 {
@@ -115,7 +123,7 @@ func (dl *Downloads) ReadiCloudStatus() (map[string]bool, error) {
 			ret[filename] = is_evictable
 		}
 	}
-	return ret, nil
+	return ret, size_ret, nil
 }
 
 func (dl *Downloads) RefreshDiskDownloads() {
@@ -129,7 +137,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 	}
 
 	/* Read iCloud status from Cloud database */
-	isEvictable, _ := dl.ReadiCloudStatus()
+	isEvictable, sizeMap, _ := dl.ReadiCloudStatus()
 
 	/* Walk iCloud drive directory */
 	var toAdd []*DownloadItem
@@ -158,7 +166,11 @@ func (dl *Downloads) RefreshDiskDownloads() {
 			isUploadingClient = false
 			hasUploadedClient = true
 			filename = filename[1:strings.Index(filename, ".icloud")]
-			size = -1
+			if _, ok := sizeMap[filename]; ok {
+				size = int64(sizeMap[filename])
+			} else {
+				size = -1
+			}
 			file_components[len(file_components) - 1] = filename
 			cloud_id_path = strings.Join(file_components, "/")
 		} else if is_evictable, ok := isEvictable[filename]; ok {

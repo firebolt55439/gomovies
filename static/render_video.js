@@ -1,3 +1,14 @@
+function updateWatchStatus(imdb_code, state, progress) {
+	window.parent.postMessage(JSON.stringify({
+		"type": "update_watch_status",
+		"data": {
+			imdb_code: imdb_code,
+			state: state,
+			progress: progress
+		}
+	}), "*");
+}
+
 $(function(){
 	// Handle video event.
 	var renderVideo = (event, video) => {
@@ -5,6 +16,7 @@ $(function(){
 
 		// Retrieve the URL of the stream.
 		var stream_url = video.url;
+		var on = video.item;
 		var filename = stream_url.slice(0, stream_url.lastIndexOf('?'));
 
 		// Initialize player markup.
@@ -26,6 +38,18 @@ $(function(){
 				player.width(size[0]);
 				player.height(size[1]);
 			}, 500);
+		};
+
+		// Define helper function for video stop
+		var onPlaybackStopped = () => {
+			if(on){
+				var progress = (100.0 * player.currentTime()) / (player.duration());
+				if(progress < 90.0){
+					updateWatchStatus(on.imdb_code, "paused", progress);
+				} else {
+					console.log("Assuming user finished watching movie.");
+				}
+			}
 		};
 
 		// Instantiate player.
@@ -67,34 +91,21 @@ $(function(){
 					}
 					*/
 				}
-				if(should_update_scrobble){
+				if(on && should_update_scrobble){
 					var progress = (100.0 * player.currentTime()) / (player.duration());
-					/*
-					metadata.updateWatchStatus(on.imdb_code, "started", progress).then(() => {
-						console.log("Started scrobble:", progress);
-					});
-					*/
+					updateWatchStatus(on.imdb_code, "started", progress);
 				}
 			});
 			this.on('pause', function() {
 				console.log("Detected video pause");
-				var progress = (100.0 * player.currentTime()) / (player.duration());
-				/*
-				metadata.updateWatchStatus(on.imdb_code, "paused", progress).then(() => {
-					console.log("Paused scrobble:", progress);
-				});
-				*/
+				if(on){
+					var progress = (100.0 * player.currentTime()) / (player.duration());
+					updateWatchStatus(on.imdb_code, "paused", progress);
+				}
 			});
 			this.on('ended', function() {
 				console.log("Detected video ended");
-				var progress = (100.0 * player.currentTime()) / (player.duration());
-				if(progress < 90.0){
-					/*
-					metadata.updateWatchStatus(on.imdb_code, "stopped", progress).then(() => {
-						console.log("Stopped scrobble:", progress);
-					});
-					*/
-				} else console.log("Assuming user finished watching movie.");
+				onPlaybackStopped();
 			});
 			this.on('userinactive', function() {
 				// Hide cursor.
@@ -105,6 +116,11 @@ $(function(){
 				$('html').css('cursor', 'default');
 			});
 		});
+
+		window.onbeforeunload = function() {
+			console.log("onbeforeunload triggered");
+			onPlaybackStopped();
+		};
 	};
 
 	window.addEventListener("message", (e) => {

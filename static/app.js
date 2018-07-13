@@ -187,6 +187,9 @@ function lookupItem(imdb_id) {
 
 function resolveItem(imdb_id) {
 	return new Promise((resolve, reject) => {
+		if(!imdb_id){
+			return resolve(null);
+		}
 		apiReq("imdbIdLookup", {
 			"id": imdb_id
 		}, function(data) {
@@ -309,7 +312,7 @@ function getDownloads() {
 // Run on page load.
 let player_windows = [];
 let win_id = 0;
-let child, currentItem, lastDownloadedUrl, history, assocDownloads
+let child, currentItem, lastDownloadedItem, history, assocDownloads
 $(function () {
 	// Set up notification permissions
 	if(Notification.permission !== "denied" && Notification.permission !== "granted") {
@@ -821,8 +824,9 @@ $(function () {
 				var tbody = $('#downloads').find("tbody");
 				tbody.empty();
 				downloads = downloads || [];
-				console.log("Downloads:", downloads);
+				// console.log("Downloads:", downloads);
 				var keep_running = false;
+				var icloud_count = 0, cloud_count = 0, in_progress_count = 0;
 				for(var item of downloads) {
 					var tr = $('<tr></tr>');
 					var download_done = !item.progress;
@@ -837,6 +841,7 @@ $(function () {
 					var col_width = (download_done ? 175 : 75);
 					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
 					tr.append($('<td style="max-width:' + title_col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.resolved ? item.resolved.title : "<i>(not associated)</i>") + '</td>'));
+					tr.append($('<td style="max-width:95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.size && item.size != -1 ? humanFileSize(item.size) : "N/A") + '</td>'));
 					var inProgress = item.progress !== null && item.progress !== undefined && item.progress != 102.0 && (item.isDownloadingCloud || item.isDownloadingClient);
 					if(item.id in progressMap && progressMap[item.id] && !inProgress){
 						var desc = (item.hasDownloadedClient
@@ -865,13 +870,16 @@ $(function () {
 						tr.append($('<td><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%; min-width: 15%;">' + desc + '</div></td>'));
 					} else {
 						var watch_hash = '#watch_download?' + $.param({
-							"folder_id": item.id
+							"folder_id": item.id,
+							"imdb_id": item.resolved ? item.resolved.imdb_code : null
 						});
 						var watch_hash_icloud = '#watch_icloud?' + $.param({
-							"icloud_id": item.id
+							"icloud_id": item.id,
+							"imdb_id": item.resolved ? item.resolved.imdb_code : null
 						});
 						var buttons = [];
 						if(item.hasUploadedClient){
+							++icloud_count;
 							buttons.push('<a href="' + watch_hash_icloud + '" class="btn btn-success">Stream from iCloud <span class="glyphicon glyphicon-film"></span></a>');
 						}
 						if(item.hasDownloadedClient && item.isLocalToClient){
@@ -881,6 +889,7 @@ $(function () {
 							buttons.push('<a href="#" class="btn btn-info btn-rename-local" role="button">Intelligent Rename <span class="glyphicon glyphicon-edit"></span></a>');
 						}
 						if(item.source === "oauth" && item.hasDownloadedCloud){
+							++cloud_count;
 							buttons.push('<a href="' + watch_hash + '" class="btn btn-success">Watch in Cloud <span class="glyphicon glyphicon-film"></span></a>');
 							buttons.push('<a href="#" class="btn btn-primary btn-dl-background" role="button">Download in Background <span class="glyphicon glyphicon-download-alt"></span></a>');
 							buttons.push('<a href="#" class="btn btn-danger btn-delete-cloud" role="button">Delete from Cloud <span class="glyphicon glyphicon-trash"></span></a>');
@@ -1004,13 +1013,14 @@ $(function () {
 						}(item.id));
 					}
 					if(!item.imdb_id || item.imdb_id.length == 0){
-						tr.addClass("warning");
+						tr.addClass("danger");
 					} else if(inProgress || item.isUploadingClient){
 						tr.addClass("active");
 						tr.find(".progress-bar").addClass("progress-bar-info");
+						++in_progress_count;
 					} else if(item.isLocalToClient){
-						tr.addClass("info");
-					} else {
+						tr.addClass("warning");
+					} else if(item.resolved && isMovieInWatched(item.resolved.imdb_code)) {
 						tr.addClass("success");
 					}
 					var currentStatus = "";
@@ -1024,6 +1034,7 @@ $(function () {
 					tr.find("td").css('vertical-align', 'middle');
 					tbody.append(tr);
 				}
+				$('#libraryDesc').text(`${downloads.length} item${downloads.length == 1 ? "" : "s"} in library (${icloud_count} in iCloud, ${cloud_count} in Cloud, ${in_progress_count} in progress)`);
 				apiReq("oauthQuery", {
 					"function": "get_memory_bandwidth",
 					"data": {}
@@ -1059,26 +1070,36 @@ $(function () {
 			});
 		} else if(hash === "watch_download"){
 			var folder_id = params.folder_id;
-			retrieveFileUrl(folder_id, /*should_download=*/false).then((file_data) => {
-				console.log("fetch:", file_data);
-				var url = file_data.url;
-				lastDownloadedUrl = url;
-				openPage({
-					"path": "/static/watch.html",
-					"allowFullScreen": true
+			resolveItem(params.imdb_id).then((on) => {
+				retrieveFileUrl(folder_id, /*should_download=*/false).then((file_data) => {
+					console.log("fetch:", file_data);
+					var url = file_data.url;
+					lastDownloadedItem = {
+						url: url,
+						item: on
+					};
+					openPage({
+						"path": "/static/watch.html",
+						"allowFullScreen": true
+					});
 				});
 			});
 		} else if(hash === "watch_icloud"){
 			var cloud_id = params.icloud_id;
 			$('.loader').show();
-			iCloudStreamUrl(cloud_id).then((file_data) => {
-				$('.loader').hide();
-				console.log("fetch:", file_data);
-				var url = file_data.url;
-				lastDownloadedUrl = url;
-				openPage({
-					"path": "/static/watch.html",
-					"allowFullScreen": true
+			resolveItem(params.imdb_id).then((on) => {
+				iCloudStreamUrl(cloud_id).then((file_data) => {
+					$('.loader').hide();
+					console.log("fetch:", file_data);
+					var url = file_data.url;
+					lastDownloadedItem = {
+						url: url,
+						item: on
+					};
+					openPage({
+						"path": "/static/watch.html",
+						"allowFullScreen": true
+					});
 				});
 			});
 		} else if(hash === "associate_imdb"){
@@ -1155,18 +1176,19 @@ $(function () {
 						icon: "success",
 						buttons: false,
 						timer: 2000
-					})/*.then(() => {
+					}).then(() => {
 						window.history.pushState(null, null, '#view_downloads');
 						$(window).trigger('hashchange');
-					})*/;
+					});
 				}
 			});
 		} else if(type === "watch_window_open"){
-			sendFrameMessage({
-				url: lastDownloadedUrl
-			});
+			sendFrameMessage(lastDownloadedItem);
 		} else if(type === "associate_window_open"){
 			sendFrameMessage(currentItem);
+		} else if(type === "update_watch_status"){
+			console.log("Setting state to '%s' for imdb code '%s' and progress '%f'", data.state, data.imdb_code, data.progress);
+			// ...
 		}
 	}, false);
 
