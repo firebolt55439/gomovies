@@ -1,7 +1,9 @@
 # gomovies
 Golang REST API and locally-hosted web interface to retrieve movie information and recommendations
 
-![Interface](https://github.com/firebolt55439/gomovies/raw/master/assets/Screen%20Shot%202017-09-15%20at%2011.26.57%20PM.png)
+![Main Interface](https://github.com/firebolt55439/gomovies/raw/master/assets/Screen%20Shot%202018-07-13%20at%2012.32.50%20AM.png)
+![Movie Modal](https://github.com/firebolt55439/gomovies/raw/master/assets/Screen%20Shot%202018-07-13%20at%2012.33.11%20AM.png)
+![Download Manager](https://github.com/firebolt55439/gomovies/raw/master/assets/Screen%20Shot%202018-07-13%20at%2012.32.50%20AM.png)
 
 ##### Currently under heavy development — clearer documentation coming soon.
 
