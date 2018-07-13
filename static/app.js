@@ -143,6 +143,19 @@ function getWatched() {
 	});
 }
 
+function getScrobbles() {
+	return new Promise((resolve, reject) => {
+		apiReq("getScrobbles", {
+		}, function(data) {
+			if(data && data.watched){
+				resolve(data.watched);
+			} else {
+				resolve([]);
+			}
+		});
+	});
+}
+
 function addToHistory(item_type, item_id) {
 	return new Promise((resolve, reject) => {
 		apiReq("addHistory", {
@@ -236,6 +249,18 @@ function downloadItemInBackground(info) {
 			"id": info.cloud_id.toString(),
 			"uri": info.uri,
 			"filename": info.filename
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function updateWatchStatus(imdb_id, progress, state) {
+	return new Promise((resolve, reject) => {
+		apiReq("updateScrobble", {
+			"imdb_code": imdb_id,
+			"progress": progress,
+			"state": state
 		}, function(data) {
 			resolve(data);
 		});
@@ -1183,12 +1208,26 @@ $(function () {
 				}
 			});
 		} else if(type === "watch_window_open"){
-			sendFrameMessage(lastDownloadedItem);
+			$('.loader').show();
+			getScrobbles().then((scrobbles) => {
+				if(lastDownloadedItem.item){
+					for(var item of scrobbles){
+						if(item && item.movie && item.movie.ids && item.movie.ids.imdb === lastDownloadedItem.item.imdb_code){
+							lastDownloadedItem.item.playback_progress = item.progress;
+						}
+					}
+				}
+				$('.loader').hide();
+				sendFrameMessage(lastDownloadedItem);
+			});
 		} else if(type === "associate_window_open"){
 			sendFrameMessage(currentItem);
 		} else if(type === "update_watch_status"){
-			console.log("Setting state to '%s' for imdb code '%s' and progress '%f'", data.state, data.imdb_code, data.progress);
-			// ...
+			updateWatchStatus(data.imdb_code, data.progress, data.state).then(function(data) {
+				return function(ret) {
+					console.log("Set state to '%s' and progress to '%.3f' for imdb code '%s'", data.state, data.progress, data.imdb_code);
+				};
+			}(data));
 		}
 	}, false);
 

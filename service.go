@@ -340,6 +340,30 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				return outp, err
 			}
 			return nil, err
+		case "updateScrobble":
+			progress, ok := req_data["progress"]
+			if !ok {
+				return nil, errors.New("Parameter `item_type` is required")
+			}
+			imdb_code, ok := req_data["imdb_code"]
+			if !ok {
+				return nil, errors.New("Parameter `imdb_code` is required")
+			}
+			state, ok := req_data["state"]
+			if !ok {
+				return nil, errors.New("Parameter `state` is required")
+			}
+			data, err := movieWorker.UpdateScrobbleStatus(imdb_code.(string), progress.(float64), state.(string))
+			return data, err
+		case "getScrobbles":
+			data, err := movieWorker.GetPlaybackScrobbles(lb_ip.(string))
+			if err == nil {
+				outp := map[string]interface{}{
+					"watched": data,
+				}
+				return outp, err
+			}
+			return nil, err
 		case "itemLookup":
 			id, ok := req_data["id"]
 			if !ok {

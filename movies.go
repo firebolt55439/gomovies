@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
+	"os"
 
 	"github.com/coocood/freecache"
 	"github.com/42minutes/go-trakt"
@@ -467,6 +468,10 @@ const (
 	WatchlistAddUrl = "/sync/watchlist"
 	HistoryGetUrl = "/sync/history"
 	HistoryAddUrl = "/sync/history"
+	PlaybackGetUrl = "/sync/playback/movies"
+	ScrobbleStartUrl = "/scrobble/start"
+	ScrobblePauseUrl = "/scrobble/pause"
+	ScrobbleStopUrl = "/scrobble/stop"
 )
 
 func newTraktRequest(uri string) (*trakt.Request, error) {
@@ -480,6 +485,28 @@ func newTraktRequest(uri string) (*trakt.Request, error) {
 
 func traktPaginateUrl(url string, page, limit int) string {
 	return (url + "?page=" + strconv.Itoa(page) + "&limit=" + strconv.Itoa(limit))
+}
+
+func traktRequestGet(path string) (interface{}, error) {
+	url := configuration.TraktBaseUrl + path
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer " + configuration.TraktAccessToken)
+	req.Header.Set("trakt-api-version", "2")
+	req.Header.Set("trakt-api-key", configuration.TraktClientId)
+	res, err := netClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	res_bytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var ret interface{}
+	json.Unmarshal(res_bytes, &ret)
+	return ret, nil
 }
 
 func mapToField(obj []map[string]interface{}, field string) ([]map[string]interface{}) {
@@ -865,6 +892,72 @@ func (movieData) AddWatchHistory(item_type string, item_id string) (map[string]i
 	req.Post(video_obj, &tmp)
 
 	return tmp, err
+}
+
+func (movieData) UpdateScrobbleStatus(imdb_code string, progress float64, state string) (map[string]interface{}, error) {
+	var tmp map[string]interface{}
+	var video_obj map[string]interface{}
+
+	/* Execute Trakt.tv history insertion */
+	var base_url string
+	if state == "started" {
+		base_url = ScrobbleStartUrl
+	} else if state == "paused" {
+		base_url = ScrobblePauseUrl
+	} else if state == "stopped" {
+		base_url = ScrobbleStopUrl
+	}
+	video_obj = map[string]interface{}{
+		"movie": map[string]interface{}{
+			"ids": map[string]interface{}{
+				"imdb": imdb_code,
+			},
+		},
+		"progress": progress,
+	}
+	for ct := 0;; ct += 1 {
+		req, err := newTraktRequest(base_url)
+		if err != nil {
+			return nil, err
+		}
+		req.Post(video_obj, &tmp)
+		if tmp != nil {
+			break
+		}
+		if ct > 5 {
+			return nil, errors.New("Gave up for Trakt scrobble update")
+		}
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.Encode(tmp)
+
+	return tmp, nil
+}
+
+func (movieData) GetPlaybackScrobbles(load_balancer_addr string) ([]map[string]interface{}, error) {
+	tmp := make([]map[string]interface{}, 0)
+
+	/* Execute Trakt.tv history retrieval */
+	for ct := 0;; ct += 1 {
+		req, err := traktRequestGet(PlaybackGetUrl)
+		if err != nil {
+			if ct > 5 {
+				return nil, err
+			} else {
+				continue
+			}
+		}
+		tmp_arr := req.([]interface{})
+		for _, on := range tmp_arr {
+			tmp = append(tmp, on.(map[string]interface{}))
+		}
+
+		// enc := json.NewEncoder(os.Stdout)
+		// enc.Encode(tmp_arr)
+		break
+	}
+
+	return tmp, nil
 }
 
 func (md movieData) GetItem(id string, load_balancer_addr string) (map[string]interface{}, error) {

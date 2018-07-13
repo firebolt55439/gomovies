@@ -48,6 +48,7 @@ $(function(){
 					updateWatchStatus(on.imdb_code, "paused", progress);
 				} else {
 					console.log("Assuming user finished watching movie.");
+					updateWatchStatus(on.imdb_code, "stopped", progress); // if progress above 80%, Trakt assumes you're done watching movie
 				}
 			}
 		};
@@ -71,7 +72,6 @@ $(function(){
 				if(first_play_start){
 					first_play_start = false;
 					resizePlayer();
-					/*
 					var progress = on.playback_progress;
 					if(progress){
 						console.log("Resuming from scrobble.");
@@ -83,13 +83,12 @@ $(function(){
 						console.log("Seeking to:", to_seek_to, "seconds");
 						player.currentTime(to_seek_to);
 						let notif = new Notification('Resumed From Scrobble', {
-							body: ("Continued from where you left off for: " + on.title),
+							body: "Continued from where you left off.",
 							icon: on.cover_image,
 							silent: true
 						});
 						notif.onclick = () => {};
 					}
-					*/
 				}
 				if(on && should_update_scrobble){
 					var progress = (100.0 * player.currentTime()) / (player.duration());
@@ -119,7 +118,9 @@ $(function(){
 
 		window.onbeforeunload = function() {
 			console.log("onbeforeunload triggered");
-			onPlaybackStopped();
+			if(!player.paused()){
+				onPlaybackStopped();
+			}
 		};
 	};
 
