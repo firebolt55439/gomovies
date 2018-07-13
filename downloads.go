@@ -48,6 +48,8 @@ type DownloadItem struct {
 
 	IsUploadingClient bool `json:"isUploadingClient"` /* true if client is uploading item */
 	HasUploadedClient bool `json:"hasUploadedClient"` /* true if client has uploaded item */
+
+	IsLocalToClient bool `json:"isLocalToClient"` /* true if on local disk */
 }
 
 type Downloads struct {
@@ -75,6 +77,47 @@ func (dl *Downloads) GetAssociatedDownloads() ([]string) {
 	return ret
 }
 
+func (dl *Downloads) ReadiCloudStatus() (map[string]bool, error) {
+	/* Dump minified cloud database to temporary file */
+	cmd := exec.Command("brctl", "dump", "-i", "-o", "./" + configuration.TemporaryCloudDbFile)
+	err := cmd.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	/* Read temporary file */
+	data_bytes, err := ioutil.ReadFile(configuration.TemporaryCloudDbFile)
+	if err != nil {
+		return nil, err
+	}
+
+	/* Parse file contents */
+	data := string(data_bytes)
+	ret := make(map[string]bool)
+	data = strings.Split(data, "----------com.apple.CloudDocs")[2]
+	data = strings.Split(data, "    ----------------------")[0]
+	filename_arr := make([]string, 0)
+	for i, on := range strings.Split(data, "reclaimer{evictable:") {
+		if strings.Contains(on, "[0;1m") {
+			using_on := strings.Split(on, "     ")[1]
+			filename := strings.Split(using_on, "[0;1m")[1]
+			filename = strings.Split(filename, "[0m")[0]
+			filename = filename[:len(filename) - 1]
+			filename_arr = append(filename_arr, filename)
+		}
+
+		if i > 0 {
+			is_evictable := on[:3] == "yes"
+			filename := filename_arr[i - 1]
+			// if is_evictable {
+				// fmt.Printf("'%s' --> %t\n", filename, is_evictable)
+			// }
+			ret[filename] = is_evictable
+		}
+	}
+	return ret, nil
+}
+
 func (dl *Downloads) RefreshDiskDownloads() {
 	/* Generate cloud id to imdb id mapping for current disk downloads */
 	cloudToImdb := make(map[string]string)
@@ -84,6 +127,9 @@ func (dl *Downloads) RefreshDiskDownloads() {
 		}
 		cloudToImdb[on.CloudID] = on.ImdbID
 	}
+
+	/* Read iCloud status from Cloud database */
+	isEvictable, _ := dl.ReadiCloudStatus()
 
 	/* Walk iCloud drive directory */
 	var toAdd []*DownloadItem
@@ -106,13 +152,20 @@ func (dl *Downloads) RefreshDiskDownloads() {
 		file_components := strings.Split(path, "/")
 		filename := file_components[len(file_components) - 1]
 		cloud_id_path := path
+		is_local := true
 		if strings.HasSuffix(filename, ".icloud") {
+			is_local = false
 			isUploadingClient = false
 			hasUploadedClient = true
 			filename = filename[1:strings.Index(filename, ".icloud")]
 			size = -1
 			file_components[len(file_components) - 1] = filename
 			cloud_id_path = strings.Join(file_components, "/")
+		} else if is_evictable, ok := isEvictable[filename]; ok {
+			if is_evictable {
+				hasUploadedClient = true
+				isUploadingClient = false
+			}
 		}
 
 		/* Get current IMDb ID, if possible */
@@ -137,6 +190,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 			HasDownloadedClient: true,
 			IsUploadingClient: isUploadingClient,
 			HasUploadedClient: hasUploadedClient,
+			IsLocalToClient: is_local,
 		}
 		toAdd = append(toAdd, item)
 		return nil
@@ -179,6 +233,7 @@ func (dl *Downloads) ReadFromDisk() {
 			HasDownloadedClient: false,
 			IsUploadingClient: false,
 			HasUploadedClient: false,
+			IsLocalToClient: false,
 		})
 	}
 
@@ -260,6 +315,7 @@ func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string,
 		HasDownloadedClient: false,
 		IsUploadingClient: false,
 		HasUploadedClient: false,
+		IsLocalToClient: false,
 	}}, dl.pool...)
 	dl.SaveToDisk()
 	return err
@@ -293,6 +349,7 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 			HasDownloadedClient: false,
 			IsUploadingClient: false,
 			HasUploadedClient: false,
+			IsLocalToClient: false,
 		}
 		didFindItem := false
 		for _, tmp := range dl.pool {
@@ -410,20 +467,24 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 
 	/* Move file to iCloud drive folder */
 	final_path := fmt.Sprintf("%s/%s", configuration.ICloudDriveFolder, filename)
-	os.Rename(dest_path, final_path)
+	err = os.Rename(dest_path, final_path)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	dl.pool = append([]*DownloadItem{&DownloadItem{
 		Source: "disk",
 		Name: filename,
 		CloudID: "icloud_" + final_path,
 		ImdbID: foundItem.ImdbID,
 		Size: foundItem.Size,
-		// Progress: progress,
 		IsDownloadingCloud: false,
 		HasDownloadedCloud: false,
 		IsDownloadingClient: false,
 		HasDownloadedClient: true,
 		IsUploadingClient: true,
 		HasUploadedClient: false,
+		IsLocalToClient: true,
 	}}, dl.pool...)
 	dl.SaveToDisk()
 }
@@ -480,8 +541,11 @@ func (dl *Downloads) EvictLocalItem(cloud_id string) (error) {
 	if !foundItem.HasDownloadedClient {
 		return errors.New("Item is not downloaded on disk")
 	}
-	if foundItem.HasUploadedClient {
-		return errors.New("Item already uploaded to iCloud")
+	if !foundItem.HasUploadedClient {
+		return errors.New("Item not uploaded to iCloud yet")
+	}
+	if !foundItem.IsLocalToClient {
+		return errors.New("Item already in iCloud")
 	}
 	if foundItem.Source == "oauth" {
 		return errors.New("Item not taken from disk")
@@ -542,8 +606,8 @@ func (dl *Downloads) IntelligentRenameItem(cloud_id, title string) (string, erro
 	}
 
 	/* Verify item flags */
-	if foundItem.HasUploadedClient {
-		return "", errors.New("Item already uploaded to iCloud")
+	if !foundItem.IsLocalToClient {
+		return "", errors.New("Item already in iCloud")
 	}
 	if !foundItem.HasDownloadedClient {
 		return "", errors.New("Item not downloaded to disk")
@@ -562,12 +626,15 @@ func (dl *Downloads) IntelligentRenameItem(cloud_id, title string) (string, erro
 	name_components := strings.Split(foundItem.Name, ".")
 	file_extension := name_components[len(name_components) - 1]
 	new_name := title
-	new_name = strings.Replace(new_name, " ", ".", -1)
 	new_name = strings.Replace(new_name, ":", "", -1)
 	new_name = strings.Replace(new_name, "/", "", -1)
 	new_name = strings.Replace(new_name, "(", "", -1)
 	new_name = strings.Replace(new_name, ")", "", -1)
-	new_name = strings.Replace(new_name, "..", "", -1)
+	new_name = strings.Replace(new_name, " - ", " ", -1)
+	for strings.Contains(new_name, "  ") {
+		new_name = strings.Replace(new_name, "  ", " ", -1)
+	}
+	new_name = strings.Replace(new_name, " ", ".", -1)
 	new_name += "." + file_extension
 
 	/* Execute rename and return error, if any */

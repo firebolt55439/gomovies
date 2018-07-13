@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 	"strconv"
-	"encoding/json"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"strings"
 )
@@ -24,7 +23,7 @@ type movieService struct{}
 func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_return_value map[string]interface{}, err_return error) {
 	defer func() {
         if r := recover(); r != nil {
-            err_return = errors.New(fmt.Sprintf("Service was panicking, recovered value: %v (%s)", r, identifyPanic()))
+            err_return = fmt.Errorf("Service was panicking, recovered value: %v (%s)", r, identifyPanic())
         }
     }()
 	//fmt.Println(s)
@@ -106,6 +105,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			if !ok {
 				return nil, errors.New("Parameter `uri` is required")
 			}
+			_, autoclear_enabled := req_data["autoclear_enabled"]
 
 			/* Execute request */
 			payload := map[string]interface{}{
@@ -117,7 +117,7 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			}
 
 			/* If not enough space, clear main folder and try again */
-			if result, ok := outp["result"].(string); ok &&
+			if result, ok := outp["result"].(string); autoclear_enabled && ok &&
 			(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
 				/* Retrieve main folder */
 				res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
@@ -174,8 +174,6 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				outp[configuration.CloudHashIdKey].(string),
 				outp["title"].(string),
 			)
-			tmp_j, _ := json.Marshal(outp)
-			fmt.Println(string(tmp_j))
 			return outp, err
 		case "startBackgroundDownload":
 			cloud_id := req_data["id"].(string)

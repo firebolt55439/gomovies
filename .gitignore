@@ -6,3 +6,5 @@ methods.json
 cloud_api.txt
 TODO.txt
 downloads.json
+tmp_cloud_db
+*.bak

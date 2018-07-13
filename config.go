@@ -30,6 +30,7 @@ type Configuration struct {
 	CloudItemIdKey string `json:"cloud_item_id_key"`
 	CloudHashIdKey string `json:"cloud_hash_id_key"`
 	TemporaryDownloadFolder string `json:"tmp_download_folder"`
+	TemporaryCloudDbFile string `json:"tmp_db_filename"`
 	
 	TitleQualityHDKeywords []string `mapstructure:"hd_titles"`
 

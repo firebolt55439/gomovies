@@ -315,7 +315,7 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
 
 	// MPAA Rating
 	parsed["mpaa_rating"] = body_json["Rated"].(string)
-	if parsed["mpaa_rating"] == "NOT RATED" {
+	if parsed["mpaa_rating"] == "NOT RATED" || parsed["mpaa_rating"] == "N/A" || parsed["mpaa_rating"] == "UNRATED" {
 		parsed["mpaa_rating"] = "NR"
 	}
 

@@ -816,13 +816,13 @@ $(function () {
 					}
 				});
 			};
+			var progressMap = {};
 			populateDownloads = (downloads, resolved) => {
 				var tbody = $('#downloads').find("tbody");
 				tbody.empty();
 				downloads = downloads || [];
 				console.log("Downloads:", downloads);
 				var keep_running = false;
-				var progressMap = {};
 				for(var item of downloads) {
 					var tr = $('<tr></tr>');
 					var download_done = !item.progress;
@@ -873,8 +873,11 @@ $(function () {
 						var buttons = [];
 						if(item.hasUploadedClient){
 							buttons.push('<a href="' + watch_hash_icloud + '" class="btn btn-success">Stream from iCloud <span class="glyphicon glyphicon-film"></span></a>');
-						} else if(item.hasDownloadedClient){
-							buttons.push('<a href="#" class="btn btn-danger btn-evict-local" role="button">Move to iCloud <span class="glyphicon glyphicon-cloud-upload"></span></a>');
+						}
+						if(item.hasDownloadedClient && item.isLocalToClient){
+							if(item.hasUploadedClient){
+								buttons.push('<a href="#" class="btn btn-danger btn-evict-local" role="button">Move to iCloud <span class="glyphicon glyphicon-cloud-upload"></span></a>');
+							}
 							buttons.push('<a href="#" class="btn btn-info btn-rename-local" role="button">Intelligent Rename <span class="glyphicon glyphicon-edit"></span></a>');
 						}
 						if(item.source === "oauth" && item.hasDownloadedCloud){
@@ -1005,6 +1008,8 @@ $(function () {
 					} else if(inProgress || item.isUploadingClient){
 						tr.addClass("active");
 						tr.find(".progress-bar").addClass("progress-bar-info");
+					} else if(item.isLocalToClient){
+						tr.addClass("info");
 					} else {
 						tr.addClass("success");
 					}
