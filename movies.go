@@ -778,8 +778,8 @@ func (movieData) SearchForItem(opts map[string]interface{}, load_balancer_addr s
 	return output, err
 }
 
-func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface{}, error) {
-	var tmp, output []map[string]interface{}
+func (movieData) GetWatchlist(load_balancer_addr string) ([]string, error) {
+	var tmp []map[string]interface{}
 	var imdb_ids []string
 	var err error
 
@@ -793,22 +793,24 @@ func (movieData) GetWatchlist(load_balancer_addr string) ([]map[string]interface
 			fmt.Println("Retrying - error:", err)
 			continue
 		}
-		break
-	}
 
-	/* Filter IMDB id's from result */
-	imdb_ids = filterTraktIds(tmp)
+		/* Filter IMDB id's from result */
+		imdb_ids = filterTraktIds(tmp)
 
-	/* Resolve matches */
-	imdb_ids = deDup(imdb_ids)
-	if len(imdb_ids) > 0 {
-		output, err = executeParallelResolution(imdb_ids, load_balancer_addr)
-	} else {
-		output = make([]map[string]interface{}, 0)
+		/* Resolve matches */
+		imdb_ids = deDup(imdb_ids)
+
+		if len(imdb_ids) == 0 {
+			if ct > 5 {
+				return nil, errors.New("Gave up on Trakt watchlist retrieval")
+			}
+		} else {
+			break
+		}
 	}
 
 	/* Return matches */
-	return output, err
+	return imdb_ids, nil
 }
 
 func (movieData) AddToWatchlist(item_type string, item_id string) (map[string]interface{}, error) {
@@ -834,7 +836,7 @@ func (movieData) AddToWatchlist(item_type string, item_id string) (map[string]in
 	return tmp, err
 }
 
-func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interface{}, error) {
+func (movieData) GetWatchHistory(load_balancer_addr string) ([]string, error) {
 	var tmp []map[string]interface{}
 	var imdb_ids []string
 	var ids []string
@@ -864,10 +866,7 @@ func (movieData) GetWatchHistory(load_balancer_addr string) ([]map[string]interf
 		}
 	}
 
-	/* Resolve in parallel */
-	output, err := executeParallelResolution(ids, load_balancer_addr)
-
-	return output, err
+	return ids, nil
 }
 
 func (movieData) AddWatchHistory(item_type string, item_id string) (map[string]interface{}, error) {

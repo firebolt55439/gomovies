@@ -50,6 +50,7 @@ type DownloadItem struct {
 	HasUploadedClient bool `json:"hasUploadedClient"` /* true if client has uploaded item */
 
 	IsLocalToClient bool `json:"isLocalToClient"` /* true if on local disk */
+	Collection string `json:"collection"` /* name of collection item belongs to, if/a */
 }
 
 type Downloads struct {
@@ -100,7 +101,14 @@ func (dl *Downloads) ReadiCloudStatus() (map[string]bool, map[string]int, error)
 	filename_arr := make([]string, 0)
 	for i, on := range strings.Split(data, "reclaimer{evictable:") {
 		if strings.Contains(on, "[0;1m") {
-			using_on := strings.Split(on, "     ")[1]
+			using_on_arr := strings.Split(on, "\n")
+			using_on := on
+			for _, tmp := range using_on_arr {
+				if strings.Contains(tmp, " sz:") {
+					using_on = tmp
+					break
+				}
+			}
 			filename := strings.Split(using_on, "[0;1m")[1]
 			filename = strings.Split(filename, "[0m")[0]
 			filename = filename[:len(filename) - 1]
@@ -138,6 +146,8 @@ func (dl *Downloads) RefreshDiskDownloads() {
 
 	/* Read iCloud status from Cloud database */
 	isEvictable, sizeMap, _ := dl.ReadiCloudStatus()
+	// enc := json.NewEncoder(os.Stdout)
+	// enc.Encode(sizeMap)
 
 	/* Walk iCloud drive directory */
 	var toAdd []*DownloadItem
@@ -169,6 +179,8 @@ func (dl *Downloads) RefreshDiskDownloads() {
 			if _, ok := sizeMap[filename]; ok {
 				size = int64(sizeMap[filename])
 			} else {
+				fmt.Printf("'%s'\n", filename)
+				fmt.Println("BAD!")
 				size = -1
 			}
 			file_components[len(file_components) - 1] = filename
@@ -187,6 +199,17 @@ func (dl *Downloads) RefreshDiskDownloads() {
 			imdb_id = cur_id
 		}
 
+		/* Detect collection name, if it exists */
+		collection := ""
+		collection_arr := strings.Split(path, configuration.ICloudDriveFolder)
+		collection_arr = strings.Split(collection_arr[1], "/")
+		for idx, on := range collection_arr {
+			if len(on) > 0 && idx != len(collection_arr) - 1 {
+				collection = on
+				break
+			}
+		}
+
 		/* Add item */
 		item := &DownloadItem{
 			Source: "disk",
@@ -203,6 +226,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 			IsUploadingClient: isUploadingClient,
 			HasUploadedClient: hasUploadedClient,
 			IsLocalToClient: is_local,
+			Collection: collection,
 		}
 		toAdd = append(toAdd, item)
 		return nil

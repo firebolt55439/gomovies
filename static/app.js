@@ -362,7 +362,6 @@ $(function () {
 	var refreshHistoryWatchlist = function() {
 		return new Promise((resolve, reject) => {
 			getWatchlist().then((data) => {
-				data = data.map((x) => x.imdb_code);
 				history.watchlist = data;
 				resolve();
 			});
@@ -371,7 +370,6 @@ $(function () {
 	var refreshHistoryWatched = function() {
 		return new Promise((resolve, reject) => {
 			getWatched().then((data) => {
-				data = data.map((x) => x.imdb_code);
 				history.watched = data;
 				resolve();
 			});
@@ -748,9 +746,6 @@ $(function () {
 				$('.loader').hide();
 				currentItem = on;
 
-				// Fill in playback and/or history information for current item.
-				currentItem.playback_progress = undefined/*history.getPlaybackProgressForMovie(imdb_id)*/; // TODO
-
 				// Initialize frame.
 				openPage({
 					"path": "/static/quality.html",
@@ -816,7 +811,15 @@ $(function () {
 			// customRefreshMessage = "Successfully retrieved watchlist.";
 			// customRefreshTimer = 1000;
 			setTimeout(() => {
-				populateGrid((limit) => getWatchlist(), /*limit=*/12 * 1);
+				populateGrid((limit) => {
+					return new Promise((resolve, reject) => {
+						getWatchlist().then((data) => {
+							resolveParallel(data).then((resolved) => {
+								resolve(resolved.resolved);
+							});
+						});
+					});
+				}, /*limit=*/12 * 1);
 			}, 150);
 		} else if(hash === "view_history"){
 			$('#downloads').hide();
@@ -825,7 +828,15 @@ $(function () {
 			// customRefreshMessage = "Successfully retrieved history.";
 			// customRefreshTimer = 1000;
 			setTimeout(() => {
-				populateGrid((limit) => getWatched(), /*limit=*/12 * 1);
+				populateGrid((limit) => {
+					return new Promise((resolve, reject) => {
+						getWatched().then((data) => {
+							resolveParallel(data).then((resolved) => {
+								resolve(resolved.resolved);
+							})
+						})
+					});
+				}, /*limit=*/12 * 1);
 			}, 150);
 		} else if(hash === "view_downloads"){
 			onHomepage = false;
@@ -864,8 +875,12 @@ $(function () {
 					}
 					tr.append($('<td style="max-width:125px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + title_inside + '</td>'));
 					var col_width = (download_done ? 175 : 75);
+					var title_contents = (item.resolved ? `<b>${item.resolved.title}</b>` : "<i>(not associated)</i>");
+					if(item.collection.length > 0){
+						title_contents += `<br /><br /><b class="text-info">${item.collection}</b> collection`
+					}
 					tr.append($('<td style="max-width:' + col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + item.name + '</td>'));
-					tr.append($('<td style="max-width:' + title_col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.resolved ? item.resolved.title : "<i>(not associated)</i>") + '</td>'));
+					tr.append($('<td style="max-width:' + title_col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + title_contents + '</td>'));
 					tr.append($('<td style="max-width:95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.size && item.size != -1 ? humanFileSize(item.size) : "N/A") + '</td>'));
 					var inProgress = item.progress !== null && item.progress !== undefined && item.progress != 102.0 && (item.isDownloadingCloud || item.isDownloadingClient);
 					if(item.id in progressMap && progressMap[item.id] && !inProgress){
@@ -902,10 +917,15 @@ $(function () {
 							"icloud_id": item.id,
 							"imdb_id": item.resolved ? item.resolved.imdb_code : null
 						});
+						var manage_collections = '#manage_collections?' + $.param({
+							"icloud_id": item.id,
+							"imdb_id": item.resolved ? item.resolved.imdb_code : null
+						});
 						var buttons = [];
 						if(item.hasUploadedClient){
 							++icloud_count;
 							buttons.push('<a href="' + watch_hash_icloud + '" class="btn btn-success">Stream from iCloud <span class="glyphicon glyphicon-film"></span></a>');
+							buttons.push('<a href="' + manage_collections + '" class="btn btn-info">Manage Collections <span class="glyphicon glyphicon-list-alt"></span></a>');
 						}
 						if(item.hasDownloadedClient && item.isLocalToClient){
 							if(item.hasUploadedClient){
@@ -1145,6 +1165,32 @@ $(function () {
 					});
 				});
 			});
+		} else if(hash === "manage_collections"){
+			if(!params.imdb_id || !params.imdb_id.length){
+				swal({
+					icon: "error",
+					title: "Not associated",
+					text: "Item needs to be associated first"
+				});
+			} else {
+			$('.loader').show();
+				resolveItem(params.imdb_id).then((on) => {
+					getCollections().then((collections) => {
+						console.log(on);
+						$('.loader').hide();
+						currentItem = {
+							item: on,
+							collections: collections
+						};
+
+						// Initialize frame.
+						openPage({
+							"path": "/static/quality.html#collections",
+							"allowFullScreen": false
+						});
+					});
+				});
+			}
 		}
 
 		// Mark done by resetting window.location.hash

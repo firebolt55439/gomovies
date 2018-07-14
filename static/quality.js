@@ -8,13 +8,18 @@ function commaSeparateNumber(val){
 function renderOptions(event, item){
     //console.log("modal:", sources);
     // Fill in information fields.
-    var downloads;
-    var isAssociate = false;
+    var downloads, collections;
+    var isAssociate = false, isCollections = false;
     if(item.downloads){
     	downloads = item.downloads;
     	item = item.item;
     	isAssociate = true;
     	$('#quality_header').text("Select Download:");
+    } else if(item.collections){
+    	collections = item.collections;
+    	item = item.item;
+    	isCollections = true;
+    	$('#quality_header').text("Select Collection:");
     } else {
     	$('#quality_header').text("Select Source:");
     }
@@ -113,6 +118,10 @@ function renderOptions(event, item){
     				}), "*");
     			});
     		});
+    		return;
+    	}
+    	if(isCollections){
+    		// ...
     		return;
     	}
 		var sort_order = {
@@ -315,7 +324,14 @@ $(function() {
 		}, 10);
 	}, false);
 
-	var win_type = window.location.hash ? "associate" : "quality";
+	var win_type;
+	if(!window.location.hash){
+		win_type = "quality";
+	} else if(window.location.hash === "#downloads"){
+		win_type = "associate";
+	} else if(window.location.hash === "#collections"){
+		win_type = "collections";
+	}
 	window.parent.postMessage(JSON.stringify({
 		"type": `${win_type}_window_open`,
 		"data": {}
