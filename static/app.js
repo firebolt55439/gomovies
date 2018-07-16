@@ -156,6 +156,26 @@ function getScrobbles() {
 	});
 }
 
+function startAirplay(info) {
+	return new Promise((resolve, reject) => {
+		apiReq("startAirplayPlayback", {
+			"url": info.url,
+			"progress": info.progress
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
+function stopAirplay() {
+	return new Promise((resolve, reject) => {
+		apiReq("stopAirplayPlayback", {
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 function addToHistory(item_type, item_id) {
 	return new Promise((resolve, reject) => {
 		apiReq("addHistory", {
@@ -314,7 +334,7 @@ function getDownloads() {
 			data.downloads = data.downloads || [];
 			var idsToResolve = data.downloads.map(x => x.imdb_id).filter(x => x && x.length > 0);
 			if(idsToResolve.length == 0){
-				return resolve(data.downloads);
+				return resolve(data);
 			}
 			resolveParallel(idsToResolve).then((resolved) => {
 				resolved = resolved.resolved;
@@ -328,7 +348,10 @@ function getDownloads() {
 						}
 					}
 				}
-				resolve(ret);
+				resolve({
+					downloads: ret,
+					airplay_info: data.airplay_info
+				});
 			});
 		});
 	});
@@ -690,6 +713,9 @@ $(function () {
 
 		$('#frameModal').modal('show');
 	};
+	var closePage = function() {
+		$('#frameModal').modal('hide');
+	}
 	var sendFrameMessage = function(obj) {
 		var json_str = JSON.stringify(obj);
 		var contentWin = $('#frameModal').find("iframe").get(0).contentWindow;
@@ -724,6 +750,30 @@ $(function () {
 			});
 		});
 	}
+
+	// Set up stop AirPlay button.
+	$('#airplayStopBtn').click(function(e) {
+		e.preventDefault();
+		stopAirplay().then((info) => {
+			if(!info || !info.result){
+				swal({
+					title: "Unable to stop playback",
+					icon: "error"
+				});
+			} else {
+				swal({
+					title: "AirPlay playback stopped",
+					text: "Successfully stopped playback.",
+					icon: "success",
+					buttons: false,
+					timer: 2000
+				}).then(() => {
+					window.history.pushState(null, null, '#view_downloads');
+					$(window).trigger('hashchange');
+				});
+			}
+		});
+	});
 
 	// Intercept hashchange event and display player.
 	$(window).on('hashchange', function() {
@@ -846,17 +896,45 @@ $(function () {
 			var downloadInterval = null, populateDownloads = null;
 			var populateDownloadsHelper = function() {
 				getDownloads().then((downloads) => {
+					var airplay_info = downloads.airplay_info;
 					if(!downloads || !downloads.length){
 						clearInterval(downloadInterval);
 						return;
 					}
-					if(!populateDownloads(downloads) || !$('#downloads').is(':visible')){
+					if(!populateDownloads(downloads.downloads, airplay_info) || !$('#downloads').is(':visible')){
 						clearInterval(downloadInterval);
 					}
 				});
 			};
+			var toHHMMSS = function(val) {
+			    var sec_num = parseInt(val, 10); // don't forget the second param
+			    var hours   = Math.floor(sec_num / 3600);
+			    var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+			    var seconds = sec_num - (hours * 3600) - (minutes * 60);
+
+			    if (hours   < 10) {hours   = "0"+hours;}
+			    if (minutes < 10) {minutes = "0"+minutes;}
+			    if (seconds < 10) {seconds = "0"+seconds;}
+			    return hours+':'+minutes+':'+seconds;
+			};
 			var progressMap = {};
-			populateDownloads = (downloads, resolved) => {
+			populateDownloads = (downloads, airplay_info) => {
+				if(!airplay_info){
+					return setTimeout(populateDownloadsHelper, 200);
+				}
+				if(airplay_info.currently_playing){
+					$('#airplayProgress').show();
+					var time_ratio = 100.0 * airplay_info.position / airplay_info.duration;
+					var time_bar = $('.airplay-bar').find(".progress-bar");
+
+					time_ratio = time_ratio.toFixed(2) + "%";
+					time_bar.css("width", time_ratio);
+
+					var time_desc = `${toHHMMSS(airplay_info.position)} of ${toHHMMSS(airplay_info.duration)} (${(100.0 * airplay_info.position / airplay_info.duration).toFixed(2)}% complete)`;
+					time_bar.text(time_desc);
+				} else {
+					$('#airplayProgress').hide();
+				}
 				var tbody = $('#downloads').find("tbody");
 				tbody.empty();
 				downloads = downloads || [];
@@ -1105,7 +1183,7 @@ $(function () {
 				return keep_running;
 			};
 			getDownloads().then((downloads) => {
-				var shouldRunAgain = populateDownloads(downloads);
+				var shouldRunAgain = populateDownloads(downloads.downloads, downloads.airplay_info);
 				if(shouldRunAgain){
 					downloadInterval = setInterval(populateDownloadsHelper, 4000);
 				}
@@ -1155,7 +1233,7 @@ $(function () {
 					$('.loader').hide();
 					currentItem = {
 						item: on,
-						downloads: downloads
+						downloads: downloads.downloads
 					};
 
 					// Initialize frame.
@@ -1274,6 +1352,27 @@ $(function () {
 					console.log("Set state to '%s' and progress to '%.3f' for imdb code '%s'", data.state, data.progress, data.imdb_code);
 				};
 			}(data));
+		} else if(type === "start_airplay"){
+			closePage();
+			startAirplay(data).then((info) => {
+				if(!info || !info.result){
+					swal({
+						title: "Unable to start playback",
+						icon: "error"
+					});
+				} else {
+					swal({
+						title: "AirPlay playback started",
+						text: "Successfully started playback.",
+						icon: "success",
+						buttons: false,
+						timer: 2000
+					}).then(() => {
+						window.history.pushState(null, null, '#view_downloads');
+						$(window).trigger('hashchange');
+					});
+				}
+			});
 		}
 	}, false);
 

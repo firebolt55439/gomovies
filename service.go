@@ -10,6 +10,7 @@ import (
 	"strconv"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"strings"
+	airplay "github.com/gongo/go-airplay"
 )
 
 // MovieService provides operations on strings.
@@ -19,6 +20,8 @@ type MovieService interface {
 }
 
 type movieService struct{}
+
+var client *airplay.Client = nil
 
 func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_return_value map[string]interface{}, err_return error) {
 	defer func() {
@@ -229,8 +232,6 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				"url": url,
 			}, /*err=*/nil
 		case "getDownloads":
-			// TODO: Check if in iCloud drive or not
-			// TODO: Allow downloading in background
 			/* Retrieve main folder */
 			res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
 			if err != nil {
@@ -257,10 +258,24 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			/* Retrieve all downloads from pool */
 			download_list := downloadPool.RetrieveDownloads()
 
-			/* Return in desired format. */
-			return map[string]interface{}{
+			/* Add Airplay playback information, if applicable */
+			ret := map[string]interface{}{
 				"downloads": download_list,
-			}, err
+				"airplay_info": map[string]interface{}{
+					"currently_playing": false,
+				},
+			}
+			if client != nil {
+				info, err := client.GetPlaybackInfo()
+				if err == nil && info.IsReadyToPlay {
+					ret["airplay_info"].(map[string]interface{})["currently_playing"] = true
+					ret["airplay_info"].(map[string]interface{})["duration"] = info.Duration
+					ret["airplay_info"].(map[string]interface{})["position"] = info.Position
+				}
+			}
+
+			/* Return in desired format. */
+			return ret, err
 		case "getAssociatedDownloads":
 			return map[string]interface{}{
 				"downloads": downloadPool.GetAssociatedDownloads(),
@@ -371,6 +386,34 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 			}
 			outp, err := movieWorker.GetItem(id.(string), lb_ip.(string))
 			return outp, err
+		case "startAirplayPlayback":
+			url, ok := req_data["url"]
+			if !ok {
+				return nil, errors.New("Parameter `url` is required")
+			}
+			progress, ok := req_data["progress"]
+			if !ok {
+				return nil, errors.New("Parameter `progress` is required")
+			}
+			if client == nil {
+				var err error
+				client, err = airplay.FirstClient()
+				if err != nil {
+					return nil, err
+				}
+			}
+			client.PlayAt(url.(string), progress.(float64))
+			return map[string]interface{}{
+				"result": true,
+			}, nil
+		case "stopAirplayPlayback":
+			if client == nil {
+				return nil, errors.New("No Airplay playback currently occurring")
+			}
+			client.Stop()
+			return map[string]interface{}{
+				"result": true,
+			}, nil
 		default:
 			return nil, errors.New("Invalid request type")
 	}

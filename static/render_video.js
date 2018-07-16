@@ -53,6 +53,31 @@ $(function(){
 			}
 		};
 
+		// Install AirPlay button if video format is supported.
+		var vjsButtonComponent = videojs.getComponent('Button');
+		videojs.registerComponent('AirplayButton', videojs.extend(vjsButtonComponent, {
+			constructor: function () {
+				vjsButtonComponent.apply(this, arguments);
+			},
+			handleClick: function () {
+				console.log("Airplay requested.");
+				// TODO: startAirplayPlayback with `url`, `progress`
+				window.parent.postMessage(JSON.stringify({
+					"type": "start_airplay",
+					"data": {
+						url: video.url,
+						progress: player.currentTime() / player.duration()
+					}
+				}), "*");
+			},
+			buildCSSClass: function () {
+				return 'vjs-control vjs-airplay-button';
+			},
+			createControlTextEl: function (button) {
+				return $(button).html($('<i class="material-icons" style="font-size: 1.5em;">airplay</i>').attr('title', 'Airplay'));
+			}
+		}));
+
 		// Instantiate player.
 		player = videojs('video-player', {
 			//"techOrder": ["Vlc"]
@@ -61,11 +86,15 @@ $(function(){
 			$('#loading-text').hide();
 			console.log("Video player is ready.");
 
+			// Show AirPlay button.
+			this.getChild('controlBar').addChild('AirplayButton', {});
+
 			// Start playing.
 			this.play();
 
 			// Show window when playback begins.
 			var first_play_start = true;
+			var ignore_this_pause = false;
 			this.on('playing', function() {
 				console.log("Started playing.");
 				var should_update_scrobble = true;
@@ -74,20 +103,38 @@ $(function(){
 					resizePlayer();
 					var progress = on.playback_progress;
 					if(progress){
-						console.log("Resuming from scrobble.");
+						ignore_this_pause = true;
 						should_update_scrobble = false;
-						// var progress = (100.0 * player.currentTime()) / (player.duration());
-						// progress = 100 * x / k
-						// x = (k * progress) / 100
-						var to_seek_to = (player.duration() * progress) / 100.0;
-						console.log("Seeking to:", to_seek_to, "seconds");
-						player.currentTime(to_seek_to);
-						let notif = new Notification('Resumed From Scrobble', {
-							body: "Continued from where you left off.",
-							icon: on.cover_image,
-							silent: true
+						player.pause();
+						swal({
+							icon: "info",
+							title: "Resume?",
+							text: "Do you want to resume from where you left off?",
+							buttons: {
+								cancel: "No",
+								confirm: "Yes!"
+							}
+						}).then((resp) => {
+							if(!resp){
+								updateWatchStatus(on.imdb_code, "started", /*progress=*/0.0);
+								player.play();
+								return;
+							}
+							console.log("Resuming from scrobble.");
+							// var progress = (100.0 * player.currentTime()) / (player.duration());
+							// progress = 100 * x / k
+							// x = (k * progress) / 100
+							var to_seek_to = (player.duration() * progress) / 100.0;
+							console.log("Seeking to:", to_seek_to, "seconds");
+							player.currentTime(to_seek_to);
+							player.play();
+							let notif = new Notification('Resumed From Scrobble', {
+								body: "Continued from where you left off.",
+								icon: on.cover_image,
+								silent: true
+							});
+							notif.onclick = () => {};
 						});
-						notif.onclick = () => {};
 					}
 				}
 				if(on && should_update_scrobble){
@@ -96,6 +143,10 @@ $(function(){
 				}
 			});
 			this.on('pause', function() {
+				if(ignore_this_pause){
+					ignore_this_pause = false;
+					return;
+				}
 				console.log("Detected video pause");
 				if(on){
 					var progress = (100.0 * player.currentTime()) / (player.duration());
