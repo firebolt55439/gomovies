@@ -350,7 +350,7 @@ function getDownloads() {
 				}
 				resolve({
 					downloads: ret,
-					airplay_info: data.airplay_info
+					airplay_info: data.airplay_info || {}
 				});
 			});
 		});
@@ -897,12 +897,16 @@ $(function () {
 			var populateDownloadsHelper = function() {
 				getDownloads().then((downloads) => {
 					var airplay_info = downloads.airplay_info;
-					if(!downloads || !downloads.length){
+					if(!downloads.downloads || !downloads.downloads.length){
 						clearInterval(downloadInterval);
+						downloadInterval = null;
 						return;
 					}
-					if(!populateDownloads(downloads.downloads, airplay_info) || !$('#downloads').is(':visible')){
+					var shouldRunAgain = populateDownloads(downloads.downloads, airplay_info);
+					// console.log(shouldRunAgain);
+					if(!shouldRunAgain || !$('#downloads').is(':visible')){
 						clearInterval(downloadInterval);
+						downloadInterval = null;
 					}
 				});
 			};
