@@ -153,7 +153,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 	var toAdd []*DownloadItem
 	filepath.Walk(configuration.ICloudDriveFolder, func(path string, f os.FileInfo, err error) error {
 		/* Ignore non-video files */
-		if !strings.Contains(path, ".mp4") {
+		if !strings.Contains(path, ".mp4") && !strings.Contains(path, ".mkv") {
 			return nil
 		}
 
