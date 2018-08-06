@@ -37,6 +37,7 @@ type DownloadItem struct {
 	CloudID string `json:"id"` /* cloud item id, either iCloud Drive or cloud */
 	LocalPath string `json:"local_path,omitempty"` /* local path of item */
 	Progress float64 `json:"progress,omitempty"` /* progress of current operation */
+	ProgressVelocity float64 `json:"progress_velocity,omitempty"` /* progress speed of current operation */
 	TimeStarted int64 `json:"time_started,omitempty"` /* unix timestamp in seconds of start time, if/a */
 	Size int64 `json:"size"` /* size of file, -1 if unknown */
 
@@ -444,10 +445,20 @@ func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
 	return err
 }
 
+func makeTimestamp() int64 {
+    return time.Now().UnixNano() / (int64(time.Millisecond)/int64(time.Nanosecond))
+}
+
+const (
+	DOWNLOAD_UPDATE_MILLISECONDS = 250
+)
+
 func (dl *Downloads) monitorDownloadProgress(done chan int64, path string, foundItem *DownloadItem) {
 	/* Monitor download progress */
 	total := foundItem.Size
 	var stop bool = false
+	var lastTimestamp int64 = -1
+	var lastSize int64 = -1
 	for {
 		select {
 			case <-done:
@@ -473,13 +484,23 @@ func (dl *Downloads) monitorDownloadProgress(done chan int64, path string, found
 
 				percent := float64(size) / float64(total) * 100.0
 				foundItem.Progress = percent
+
+				if lastTimestamp != -1 {
+					currentTimestamp := makeTimestamp()
+					size_added := size - lastSize
+					time_elapsed := currentTimestamp - lastTimestamp
+					foundItem.ProgressVelocity = 1000.0 * float64(size_added) / float64(time_elapsed)
+				}
+
+				lastSize = size
+				lastTimestamp = makeTimestamp()
 		}
 
 		if stop {
 			break
 		}
 
-		time.Sleep(125 * time.Millisecond)
+		time.Sleep(DOWNLOAD_UPDATE_MILLISECONDS * time.Millisecond)
 	}
 }
 
