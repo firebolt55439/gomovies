@@ -55,6 +55,7 @@ type DownloadItem struct {
 
 type Downloads struct {
 	pool []*DownloadItem
+	collections map[string]int
 }
 
 func Filter(vs []*DownloadItem, f func(*DownloadItem) bool) []*DownloadItem {
@@ -74,6 +75,17 @@ func (dl *Downloads) GetAssociatedDownloads() ([]string) {
 	})
 	for _, on := range arr {
 		ret = append(ret, on.ImdbID)
+	}
+	return ret
+}
+
+func (dl *Downloads) GetCollections() ([]interface{}) {
+	ret := make([]interface{}, 0)
+	for k := range dl.collections {
+		ret = append(ret, map[string]interface{}{
+			"name": k,
+			"count": dl.collections[k],
+		})
 	}
 	return ret
 }
@@ -151,6 +163,7 @@ func (dl *Downloads) RefreshDiskDownloads() {
 
 	/* Walk iCloud drive directory */
 	var toAdd []*DownloadItem
+	collectionSet := make(map[string]int)
 	filepath.Walk(configuration.ICloudDriveFolder, func(path string, f os.FileInfo, err error) error {
 		/* Ignore non-video files */
 		if !strings.Contains(path, ".mp4") && !strings.Contains(path, ".mkv") {
@@ -206,6 +219,11 @@ func (dl *Downloads) RefreshDiskDownloads() {
 		for idx, on := range collection_arr {
 			if len(on) > 0 && idx != len(collection_arr) - 1 {
 				collection = on
+				if _, ok := collectionSet[collection]; ok {
+					collectionSet[collection]++
+				} else {
+					collectionSet[collection] = 1
+				}
 				break
 			}
 		}
@@ -237,6 +255,9 @@ func (dl *Downloads) RefreshDiskDownloads() {
 		return v.Source != "disk"
 	})
 	dl.pool = append(dl.pool, toAdd...)
+
+	/* Update collections */
+	dl.collections = collectionSet
 }
 
 func (dl *Downloads) ReadFromDisk() {
@@ -594,6 +615,60 @@ func (dl *Downloads) EvictLocalItem(cloud_id string) (error) {
 	cmd := exec.Command("brctl", "evict", foundItem.LocalPath)
 	err := cmd.Run()
 	return err
+}
+
+func (dl *Downloads) AddToCollection(cloud_id string, collection_id string) (error) {
+	/* Find item in pool */
+	var foundItem *DownloadItem = nil
+	for _, on := range dl.pool {
+		if on.CloudID == cloud_id {
+			foundItem = on
+			break
+		}
+	}
+	if foundItem == nil {
+		return errors.New("Could not find item with matching cloud_id")
+	}
+
+	/* Verify item flags */
+	if !foundItem.HasUploadedClient {
+		return errors.New("Item not uploaded to iCloud")
+	}
+	if foundItem.Source == "oauth" {
+		return errors.New("Item not taken from disk")
+	}
+	if len(foundItem.LocalPath) == 0 {
+		return errors.New("No path found in item")
+	}
+
+	/* Execute collection move and return result */
+	collection_path := filepath.Join(
+		configuration.ICloudDriveFolder,
+		collection_id,
+	)
+	os.MkdirAll(collection_path, os.ModePerm)
+	final_path_fake := filepath.Join(
+		collection_path,
+		foundItem.Name,
+	)
+	split_arr := strings.Split(foundItem.LocalPath, "/")
+	final_path := filepath.Join(
+		collection_path,
+		split_arr[len(split_arr) - 1],
+	)
+	err := os.Rename(foundItem.LocalPath, final_path)
+	if err != nil {
+		return err
+	}
+
+	/* Append filler entry for new path to ensure IMDb ID association is not lost */
+	dl.pool = append(dl.pool, &DownloadItem{
+		Source: "disk",
+		CloudID: "icloud_" + final_path_fake,
+		ImdbID: foundItem.ImdbID,
+		LocalPath: final_path,
+	})
+	return nil
 }
 
 func (dl *Downloads) GetiCloudStreamUrl(cloud_id string) (string, error) {

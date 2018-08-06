@@ -5,23 +5,30 @@ function commaSeparateNumber(val){
 	return val;
 }
 
+var fillInOptions;
+
 function renderOptions(event, item){
     //console.log("modal:", sources);
     // Fill in information fields.
-    var downloads, collections;
+    var downloads, collections, current_collection, icloud_id;
     var isAssociate = false, isCollections = false;
     if(item.downloads){
     	downloads = item.downloads;
     	item = item.item;
     	isAssociate = true;
     	$('#quality_header').text("Select Download:");
+    	$('#none_available').text("No downloads exist.");
     } else if(item.collections){
+    	current_collection = item.current_collection;
+    	icloud_id = item.icloud_id;
     	collections = item.collections;
     	item = item.item;
     	isCollections = true;
     	$('#quality_header').text("Select Collection:");
+    	$('#none_available').text("No collections exist.");
     } else {
     	$('#quality_header').text("Select Source:");
+    	$('#none_available').text("No sources available.");
     }
     $('#cover-img').attr('src', item.cover_image);
     $('#summary-text').text(item.summary);
@@ -56,7 +63,7 @@ function renderOptions(event, item){
 	}
 
     // Fill in source selection.
-    var fillInOptions = function(sources) {
+    fillInOptions = function(sources) {
     	$('#options').empty();
     	if(isAssociate){
     		var pretty_source = {
@@ -81,7 +88,7 @@ function renderOptions(event, item){
     			if(on.imdb_id.length == 0){
     				li.css('background-color', "rgb(0,128,0)");
     			} else {
-    				li.css('background-color', "rgb(128,0,0)");
+    				li.css('background-color', "rgb(0,0,128)");
     			}
     			$('#options').append(li);
     		}
@@ -121,7 +128,91 @@ function renderOptions(event, item){
     		return;
     	}
     	if(isCollections){
-    		// ...
+    		collections.push({
+    			name: "",
+    			count: null
+    		});
+    		for(var on of collections){
+    			var li = $('<li class="opt-select" data-name="' + on.name + '"></li>');
+    			if(on.count != null){
+    				var desc_arr = [];
+    				desc_arr.push(on.name);
+    				desc_arr.push(`${on.count} item${on.count == 1 ? "" : "s"}`);
+    				li.text(desc_arr.join(" | "));
+    				if(current_collection === on.name){
+    					li.css('background-color', "rgb(0,128,0)");
+    					li.addClass("disabled");
+    				} else {
+    					li.css('background-color', "rgb(0,0,128)");
+    				}
+    			} else {
+    				li.text("(make a new collection)");
+    				li.addClass("new_collection");
+    				li.css('background-color', "rgb(0,128,128)");
+    			}
+    			$('#options').append(li);
+    		}
+    		if(collections.length == 0){
+    			$('#quality_header').hide();
+    			$('#none_available').show();
+    		}
+    		// Handle clicks.
+    		var collectionConfirmHandler = function(name) {
+    			swal({
+    				title: "Add to collection?",
+    				icon: "warning",
+    				text: `Do you want to add this to the '${name}' collection?`,
+    				buttons: {
+    					cancel: true,
+    					confirm: {
+    						text: "Yes, I do!"
+    					}
+    				},
+    				icon: item.cover_image
+    			}).then((value) => {
+    				if(!value) return;
+    				console.log("Adding to collection confirmed.");
+    				window.parent.postMessage(JSON.stringify({
+    					type: "add_to_collection",
+    					data: {
+    						cloud_id: icloud_id,
+    						collection_id: name
+    					}
+    				}), "*");
+    			});
+    		};
+    		$('.opt-select').click(function() {
+    			var that = $(this);
+    			var name = that.data("name");
+    			if(that.hasClass("disabled")){
+    				return swal({
+    					title: "Already in collection",
+    					text: `This already belongs to the '${name}' collection.`,
+    					icon: "error",
+    					timer: 3000,
+    					buttons: false
+    				});
+    			}
+    			if(that.hasClass("new_collection")){
+    				// ...
+    				swal({
+    					title: "Name of collection?",
+    					text: "Please enter the name of the new collection",
+    					content: "input",
+    					buttons: {
+    						cancel: true,
+    						confirm: {
+    							text: "Create collection!"
+    						}
+    					}
+    				}).then((value) => {
+    					if(!value) return;
+    					collectionConfirmHandler(value);
+    				});
+    				return;
+    			}
+    			collectionConfirmHandler(name);
+    		});
     		return;
     	}
 		var sort_order = {
@@ -171,7 +262,10 @@ function renderOptions(event, item){
 				li.attr("title", on.filename);
 			}
 			var desc_arr = [on.quality, on.size, on.sources + " hosts", on.clients + " clients", on.source];
-			if(on.tv) desc_arr.unshift("S" + on.tv.season + "E" + on.tv.episode);
+			if(on.tv){
+				if(on.tv.episode < 10000) desc_arr.unshift("S" + on.tv.season + "E" + on.tv.episode);
+				else desc_arr.unshift("S" + on.tv.season);
+			}
 			li.text(desc_arr.join(" | "));
 			var scaled = getScaledhosts(parseInt(on.sources));
 			var rgb_components = [(255 * (100.0 - scaled)) / 100, ((255 * scaled) / 100.0), 0.0]
@@ -258,6 +352,23 @@ function renderOptions(event, item){
     fillInOptions(item.sources);
 
     // Handle TV shows.
+    if(item.is_tv_show){
+    	$('.tv-container').removeClass("hidden");
+    	$('#seasonsel').val("1");
+    	$('#episodesel').val("1");
+    	$('#tv_search_btn').click(() => {
+    		$('#tv_search_btn').blur();
+    		$('.loader').show();
+    		window.parent.postMessage(JSON.stringify({
+    			type: "search_tv_episode",
+    			data: {
+    				imdb_code: item.imdb_code,
+    				season: parseInt($('#seasonsel').val(), 10),
+    				episode: parseInt($('#episodesel').val(), 10)
+    			}
+    		}), "*");
+    	});
+    }
     /*
     var main_console = remote.getGlobal("console");
     //main_console.log(item);

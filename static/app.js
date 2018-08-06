@@ -263,6 +263,17 @@ function associateItem(info) {
 	});
 }
 
+function addToCollection(info) {
+	return new Promise((resolve, reject) => {
+		apiReq("addToCollection", {
+			"cloud_id": info.cloud_id.toString(),
+			"collection_id": info.collection_id
+		}, function(data) {
+			resolve(data);
+		});
+	});
+}
+
 function downloadItemInBackground(info) {
 	return new Promise((resolve, reject) => {
 		apiReq("startBackgroundDownload", {
@@ -353,6 +364,14 @@ function getDownloads() {
 					airplay_info: data.airplay_info || {}
 				});
 			});
+		});
+	});
+}
+
+function getCollections() {
+	return new Promise((resolve, reject) => {
+		apiReq("getCollections", {}, function(data) {
+			resolve(data.collections);
 		});
 	});
 }
@@ -1001,7 +1020,8 @@ $(function () {
 						});
 						var manage_collections = '#manage_collections?' + $.param({
 							"icloud_id": item.id,
-							"imdb_id": item.resolved ? item.resolved.imdb_code : null
+							"imdb_id": item.resolved ? item.resolved.imdb_code : null,
+							"current_collection": item.collection
 						});
 						var buttons = [];
 						if(item.hasUploadedClient){
@@ -1255,14 +1275,16 @@ $(function () {
 					text: "Item needs to be associated first"
 				});
 			} else {
-			$('.loader').show();
+				$('.loader').show();
 				resolveItem(params.imdb_id).then((on) => {
 					getCollections().then((collections) => {
 						console.log(on);
 						$('.loader').hide();
 						currentItem = {
 							item: on,
-							collections: collections
+							collections: collections,
+							icloud_id: params.icloud_id,
+							current_collection: params.current_collection
 						};
 
 						// Initialize frame.
@@ -1350,6 +1372,8 @@ $(function () {
 			});
 		} else if(type === "associate_window_open"){
 			sendFrameMessage(currentItem);
+		} else if(type === "collections_window_open"){
+			sendFrameMessage(currentItem);
 		} else if(type === "update_watch_status"){
 			updateWatchStatus(data.imdb_code, data.progress, data.state).then(function(data) {
 				return function(ret) {
@@ -1368,6 +1392,34 @@ $(function () {
 					swal({
 						title: "AirPlay playback started",
 						text: "Successfully started playback.",
+						icon: "success",
+						buttons: false,
+						timer: 2000
+					}).then(() => {
+						window.history.pushState(null, null, '#view_downloads');
+						$(window).trigger('hashchange');
+					});
+				}
+			});
+		} else if(type === "search_tv_episode"){
+			// .imdb_code, .episode, .season
+			// ... TODO
+		} else if(type === "add_to_collection") {
+			$('#frameModal').modal('hide');
+			$('.loader').show();
+			addToCollection(data).then((data) => {
+				console.log("associate result:", data);
+				$('.loader').hide();
+				if(data.result !== true){
+					swal({
+						title: "Unable to add to collection",
+						text: data.err,
+						icon: "error"
+					});
+				} else {
+					swal({
+						title: "Item successfully added",
+						text: "Successfully added item to collection.",
 						icon: "success",
 						buttons: false,
 						timer: 2000

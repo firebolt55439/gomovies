@@ -276,6 +276,23 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 
 			/* Return in desired format. */
 			return ret, err
+		case "getCollections":
+			return map[string]interface{}{
+				"collections": downloadPool.GetCollections(),
+			}, /*err=*/nil
+		case "addToCollection":
+			cloud_id := req_data["cloud_id"].(string)
+			collection_id := req_data["collection_id"].(string)
+			err := downloadPool.AddToCollection(cloud_id, collection_id)
+			if err != nil {
+				return map[string]interface{}{
+					"result": false,
+					"err": err.Error(),
+				}, nil
+			}
+			return map[string]interface{}{
+				"result": true,
+			}, /*err=*/nil
 		case "getAssociatedDownloads":
 			return map[string]interface{}{
 				"downloads": downloadPool.GetAssociatedDownloads(),
