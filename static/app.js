@@ -991,6 +991,7 @@ $(function () {
 		        link.setAttribute('download', filename);
 		        link.click();
 		    };
+		    $('#libraryExportBtn').unbind("click");
 		    $('#libraryExportBtn').click(function(e) {
 		    	getDownloads().then((downloads) => {
 		    		downloads = downloads.downloads;
