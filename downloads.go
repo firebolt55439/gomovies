@@ -704,6 +704,32 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 		fmt.Println(err)
 	}
 
+	/* Retrieve main folder */
+	res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	/* Get all folders in main folder. */
+	var list []interface{}
+	list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
+	if !ok {
+		fmt.Println("Could not retrieve ID's from downloading path")
+		return
+	}
+	list = append(list, list_tmp...)
+	list_tmp, ok = res["folders"].([]interface{})
+	if !ok {
+		fmt.Println("Could not retrieve ID's from folders path")
+		return
+	}
+	list = append(list, list_tmp...)
+
+	/* Refresh current download states */
+	downloadPool.RefreshDownloadStates(list)
+	downloadPool.RefreshDiskDownloads()
+
 	/* Pop next item off queue if it exists */
 	counter := 0
 	for {

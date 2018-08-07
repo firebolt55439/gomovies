@@ -1084,7 +1084,7 @@ $(function () {
 						}
 						var prog_speed = '';
 						if(item.progress_velocity){
-							prog_speed = `<p style="margin-top: -10px; font-size: 1.0em;">~${humanFileSize(item.progress_velocity)}/s ${item.avg_progress_velocity ? (humanFileSize(item.avg_progress_velocity) + "/s") : ""}</p>`;
+							prog_speed = `<p style="margin-top: -10px; font-size: 1.0em;">${humanFileSize(item.progress_velocity)}/s ${item.avg_progress_velocity ? ("(" + humanFileSize(item.avg_progress_velocity) + "/s)") : ""}</p>`;
 						}
 						tr.append($('<td><div><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%; min-width: 20%;">' + desc + '</div></div>' + prog_speed + '</div></td>'));
 					} else {
