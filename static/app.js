@@ -984,7 +984,13 @@ $(function () {
 					tr.append($('<td style="max-width:' + title_col_width + 'px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + title_contents + '</td>'));
 					tr.append($('<td style="max-width:95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (item.size && item.size != -1 ? humanFileSize(item.size) : "N/A") + '</td>'));
 					var inProgress = item.progress !== null && item.progress !== undefined && item.progress != 102.0 && (item.isDownloadingCloud || item.isDownloadingClient);
-					if(item.id in progressMap && progressMap[item.id] && !inProgress){
+					if(!inProgress && item.isDownloadingCloud){
+						inProgress = true;
+						item.progress = "0.0";
+					}
+					var idDoneProgress = item.id in progressMap && progressMap[item.id];
+					var imdbIdDoneProgress = item.resolved && item.resolved.imdb_code in progressMap && progressMap[item.resolved.imdb_code];
+					if((idDoneProgress || imdbIdDoneProgress) && !inProgress){
 						var desc = (item.hasDownloadedClient
 									? `Successfully finished download of '${item.name}' in background.`
 									: `Successfully finished cloud download of '${item.name}'.`);
@@ -997,6 +1003,7 @@ $(function () {
 						});
 					}
 					progressMap[item.id] = inProgress;
+					if(item.resolved) progressMap[item.resolved.imdb_code] = inProgress;
 					if(inProgress){
 						keep_running = true;
 						var prog = parseFloat(item.progress).toFixed(2);
@@ -1110,6 +1117,13 @@ $(function () {
 									var url = file_data.url;
 									// window.location = url;
 									// setTimeout(populateDownloadsHelper, 200);
+									if(!file_data.name.endsWith(".mp4")){
+										return swal({
+											title: "Wrong file extension",
+											text: `File extension is .${file_data.name.split(".").slice(-1)[0]}, not .mp4`,
+											icon: "error"
+										});
+									}
 									downloadItemInBackground({
 										cloud_id: folder_id,
 										uri: url,
@@ -1320,10 +1334,21 @@ $(function () {
 				console.log("fetch result:", data);
 				$('.loader').hide();
 				if(data.result !== true){
-					swal({
-						title: "Unable to download item",
-						icon: "error"
-					});
+					if(!data.enqueued){
+						swal({
+							title: "Unable to download item",
+							text: (data.not_enough_space ? "Not enough space available in cloud" : data.result),
+							icon: "error"
+						});
+					} else {
+						swal({
+							title: "Item queued",
+							text: "Added to queue",
+							icon: "success",
+							buttons: false,
+							timer: 3000
+						});
+					}
 				} else {
 					swal({
 						title: "Download has begun",

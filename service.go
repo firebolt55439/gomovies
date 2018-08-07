@@ -119,9 +119,13 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				return nil, err
 			}
 
-			/* If not enough space, clear main folder and try again */
-			if result, ok := outp["result"].(string); autoclear_enabled && ok &&
+			/* If not enough space, clear main folder and try again (only if flag enabled) */
+			not_enough_space := false
+			if result, ok := outp["result"].(string); ok &&
 			(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
+				not_enough_space = true
+			}
+			if not_enough_space && autoclear_enabled {
 				/* Retrieve main folder */
 				res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
 				if err != nil {
@@ -171,12 +175,22 @@ func (movieService) Movies(s map[string]interface{}, ctx context.Context) (err_r
 				}
 				fmt.Println("retried:", outp)
 			}
-			downloadPool.RegisterOAuthDownloadStart(
-				req_data["imdb_id"].(string),
-				fmt.Sprintf("%.0f", outp[configuration.CloudItemIdKey].(float64)),
-				outp[configuration.CloudHashIdKey].(string),
-				outp["title"].(string),
-			)
+			if !not_enough_space {
+				downloadPool.RegisterOAuthDownloadStart(
+					req_data["imdb_id"].(string),
+					fmt.Sprintf("%.0f", outp[configuration.CloudItemIdKey].(float64)),
+					outp[configuration.CloudHashIdKey].(string),
+					outp["title"].(string),
+				)
+				outp["enqueued"] = false
+			} else {
+				downloadPool.RegisterOAuthDownloadQueued(
+					req_data["imdb_id"].(string),
+					payload,
+				)
+				outp["enqueued"] = true
+			}
+			outp["not_enough_space"] = not_enough_space
 			return outp, err
 		case "startBackgroundDownload":
 			cloud_id := req_data["id"].(string)

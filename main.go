@@ -73,6 +73,7 @@ func main() {
 
 	/* Initialize downloads */
 	downloadPool.ReadFromDisk()
+	downloadPool.queue = make(chan interface{}, 100)
 
 	/* Initialize microservices */
 	logger = log.NewLogfmtLogger(os.Stderr)

@@ -303,6 +303,10 @@ func (movieData) ResolveImdb(id string) (parsed map[string]interface{}, err erro
 	parsed["cover_image"], _ = body_json["Poster"].(string)
 
 	// Year
+	if body_json["Year"] == nil {
+		parsed["unreleased"] = true
+		return parsed, err
+	}
 	year, _ := strconv.Atoi(body_json["Year"].(string))
 	parsed["year"] = year
 

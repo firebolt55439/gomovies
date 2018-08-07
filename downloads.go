@@ -57,6 +57,7 @@ type DownloadItem struct {
 type Downloads struct {
 	pool []*DownloadItem
 	collections map[string]int
+	queue chan interface{}
 }
 
 func Filter(vs []*DownloadItem, f func(*DownloadItem) bool) []*DownloadItem {
@@ -357,6 +358,100 @@ func (dl *Downloads) AssociateDownloadWithImdb(download_id string, imdb_id strin
 	return false
 }
 
+func (dl *Downloads) monitorOAuthDownload(cloud_id string, name string) (error) {
+	/* Poll folder state in a loop */
+	for {
+		/* Retrieve main folder */
+		res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+		if err != nil {
+			return err
+		}
+
+		/* Get all folders in main folder. */
+		var list []interface{}
+		list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
+		if !ok {
+			return errors.New("Could not retrieve ID's from downloading path")
+		}
+		list = append(list, list_tmp...)
+		list_tmp, ok = res["folders"].([]interface{})
+		if !ok {
+			return errors.New("Could not retrieve ID's from folders path")
+		}
+		list = append(list, list_tmp...)
+
+		/* Detect current download progress */
+		didFindItem := false
+		downloadDone := false
+		for _, on_m := range list {
+			on := on_m.(map[string]interface{})
+			id := fmt.Sprintf("%.0f", on["id"].(float64))
+			if id == cloud_id || on["name"].(string) == name {
+				didFindItem = true
+				if _, ok := on["progress"]; !ok {
+					downloadDone = true
+					fmt.Println("Cloud is done downloading!")
+
+					/* Retrieve folder listing */
+					res, err := oAuth.ApiCall("folder/" + id, "GET", nil)
+					if err != nil {
+						fmt.Println(err)
+						return err
+					}
+
+					/* Find the video file */
+					var largestSize float64 = -1
+					var largestItem map[string]interface{}
+					for _, item_i := range res["files"].([]interface{}) {
+						item := item_i.(map[string]interface{})
+						hasPlayVideo := false
+						if _, ok := item["play_video"]; ok {
+							hasPlayVideo = true
+						}
+						hasVideoProgress := false
+						if _, ok := item["video_progress"]; ok {
+							hasVideoProgress = true
+						}
+						if !hasPlayVideo && !hasVideoProgress {
+							continue
+						}
+						size := item["size"].(float64)
+						if size > largestSize {
+							largestItem = item
+							largestSize = size
+						}
+					}
+					// b_2, _ := json.MarshalIndent(largestItem, "", "	")
+					// fmt.Println(string(b_2))
+
+					/* Retrieve file download URL */
+					outp, err := oAuth.Query("fetch_file", map[string]interface{}{
+						"folder_file_id": fmt.Sprintf("%.0f", largestItem["folder_file_id"].(float64)),
+					})
+					// b, _ := json.MarshalIndent(outp, "", "	")
+					// fmt.Println(string(b))
+
+					/* Start background download */
+					err = dl.StartBackgroundDownload(outp["url"].(string), cloud_id, outp["name"].(string))
+					if err != nil {
+						fmt.Println(err)
+						return err
+					}
+				}
+				break
+			}
+		}
+		if !didFindItem || downloadDone {
+			/* If item not found or done downloading, then stop looping */
+			break
+		}
+
+		/* Sleep before looping again */
+		time.Sleep(2500 * time.Millisecond)
+	}
+	return nil
+}
+
 func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string, hash_id string, name string) (error) {
 	/* Prepend download to beginning of pool so it appears first */
 	var err error = nil
@@ -376,7 +471,18 @@ func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string,
 		IsLocalToClient: false,
 	}}, dl.pool...)
 	dl.SaveToDisk()
+
+	/* Monitor download progress in background */
+	go dl.monitorOAuthDownload(cloud_id, name)
 	return err
+}
+
+func (dl *Downloads) RegisterOAuthDownloadQueued(imdb_id string, payload map[string]interface{}) (error) {
+	dl.queue <- map[string]interface{}{
+		"imdb_id": imdb_id,
+		"payload": payload,
+	}
+	return nil
 }
 
 func contains(s []string, e string) bool {
@@ -550,12 +656,14 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 		fmt.Println(err)
 		return
 	}
+	new_cloud_id := "icloud_" + final_path
 	dl.pool = append([]*DownloadItem{&DownloadItem{
 		Source: "disk",
 		Name: filename,
-		CloudID: "icloud_" + final_path,
+		CloudID: new_cloud_id,
 		ImdbID: foundItem.ImdbID,
 		Size: foundItem.Size,
+		LocalPath: final_path,
 		IsDownloadingCloud: false,
 		HasDownloadedCloud: false,
 		IsDownloadingClient: false,
@@ -565,6 +673,64 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 		IsLocalToClient: true,
 	}}, dl.pool...)
 	dl.SaveToDisk()
+
+	/* Delete from cloud */
+	_, err = oAuth.Query("delete", map[string]interface{}{
+		"delete_arr": "[{\"type\": \"folder\", \"id\": \"" + foundItem.CloudID + "\"}]",
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	/* Intelligently rename just-downloaded file */
+	movieWorker := movieData{}
+	resolved, err := movieWorker.ResolveImdb(foundItem.ImdbID)
+	if err == nil {
+		new_title, err := dl.IntelligentRenameItem(new_cloud_id, resolved["title"].(string))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Printf("Intelligently renamed to '%s'\n", new_title)
+		}
+	} else {
+		fmt.Println(err)
+	}
+
+	/* Pop next item off queue if it exists */
+	var q map[string]interface{}
+	select {
+		case tmp, ok := <-dl.queue:
+			if !ok {
+				fmt.Println("Channel closed!")
+				return
+			} else {
+				q = tmp.(map[string]interface{})
+			}
+		default:
+			return
+	}
+	outp, err := oAuth.Query(configuration.DownloadUriOauth, q["payload"].(map[string]interface{}))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	/* If not enough space, push item to back of queue */
+	if result, ok := outp["result"].(string); ok &&
+	(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
+		dl.queue <- q
+		fmt.Println("Not enough space --> pushing item to back of queue")
+		return
+	}
+
+	/* Otherwise, go ahead and process item */
+	dl.RegisterOAuthDownloadStart(
+		q["imdb_id"].(string),
+		fmt.Sprintf("%.0f", outp[configuration.CloudItemIdKey].(float64)),
+		outp[configuration.CloudHashIdKey].(string),
+		outp["title"].(string),
+	)
 }
 
 func (dl *Downloads) StartBackgroundDownload(url, cloud_id, filename string) (error) {
