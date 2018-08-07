@@ -940,6 +940,73 @@ $(function () {
 			    if (seconds < 10) {seconds = "0"+seconds;}
 			    return hours+':'+minutes+':'+seconds;
 			};
+			var convertArrayOfObjectsToCSV = function(args) {
+				// From https://halistechnology.com/2015/05/28/use-javascript-to-export-your-data-as-csv/
+		        var result, ctr, keys, columnDelimiter, lineDelimiter, data;
+
+		        data = args.data || null;
+		        if (data == null || !data.length) {
+		            return null;
+		        }
+
+		        columnDelimiter = args.columnDelimiter || ',';
+		        lineDelimiter = args.lineDelimiter || '\n';
+
+		        keys = Object.keys(data[0]);
+
+		        result = '';
+		        result += keys.join(columnDelimiter);
+		        result += lineDelimiter;
+
+		        data.forEach(function(item) {
+		            ctr = 0;
+		            keys.forEach(function(key) {
+		                if (ctr > 0) result += columnDelimiter;
+
+		                result += item[key];
+		                ctr++;
+		            });
+		            result += lineDelimiter;
+		        });
+
+		        return result;
+		    };
+		    var downloadCSV = function(data, args) {
+		    	// From https://halistechnology.com/2015/05/28/use-javascript-to-export-your-data-as-csv/
+		        var data, filename, link;
+		        var csv = convertArrayOfObjectsToCSV({
+		            data: data
+		        });
+		        if (csv == null) return;
+
+		        filename = args.filename || 'export.csv';
+
+		        if (!csv.match(/^data:text\/csv/i)) {
+		            csv = 'data:text/csv;charset=utf-8,' + csv;
+		        }
+		        data = encodeURI(csv);
+
+		        link = document.createElement('a');
+		        link.setAttribute('href', data);
+		        link.setAttribute('download', filename);
+		        link.click();
+		    };
+		    $('#libraryExportBtn').click(function(e) {
+		    	getDownloads().then((downloads) => {
+		    		downloads = downloads.downloads;
+		    		var data = [];
+		    		for(var item of downloads){
+		    			if(item.source === "oauth") continue;
+		    			data.push({
+		    				Filename: item.name,
+		    				Title: (item.resolved ? item.resolved.title : "(unknown)"),
+		    				Size: (item.size && item.size != -1 ? humanFileSize(item.size) : "(unknown)"),
+		    				Collection: (item.collection && item.collection.length > 0 ? item.collection : "N/A")
+		    			});
+		    		}
+		    		downloadCSV(data, {});
+		    	});
+		    });
 			var progressMap = {};
 			populateDownloads = (downloads, airplay_info) => {
 				if(!airplay_info){
@@ -1017,7 +1084,7 @@ $(function () {
 						}
 						var prog_speed = '';
 						if(item.progress_velocity){
-							prog_speed = `<p style="margin-top: -10px; font-size: 1.0em;">~${humanFileSize(item.progress_velocity)}/s</p>`;
+							prog_speed = `<p style="margin-top: -10px; font-size: 1.0em;">~${humanFileSize(item.progress_velocity)}/s ${item.avg_progress_velocity ? (humanFileSize(item.avg_progress_velocity) + "/s") : ""}</p>`;
 						}
 						tr.append($('<td><div><div class="progress" style="margin-top: 10px;"><div class="progress-bar progress-bar-striped active" style="width: ' + prog + '%; min-width: 20%;">' + desc + '</div></div>' + prog_speed + '</div></td>'));
 					} else {
@@ -1213,7 +1280,7 @@ $(function () {
 					var bandwidth_bar = $('.bandwidth-bar').find(".progress-bar");
 
 					space_ratio = space_ratio.toFixed(2) + "%";
-					bandwidth_ratio = bandwidth_ratio.toFixed(2) + "%";
+					bandwidth_ratio = Math.min(bandwidth_ratio, 100.0).toFixed(2) + "%";
 					space_bar.css("width", space_ratio);
 					bandwidth_bar.css("width", bandwidth_ratio);
 

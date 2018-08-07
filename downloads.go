@@ -38,6 +38,8 @@ type DownloadItem struct {
 	LocalPath string `json:"local_path,omitempty"` /* local path of item */
 	Progress float64 `json:"progress,omitempty"` /* progress of current operation */
 	ProgressVelocity float64 `json:"progress_velocity,omitempty"` /* progress speed of current operation */
+	AvgProgressVelocity float64 `json:"avg_progress_velocity,omitempty"` /* average progress speed of current operation */
+	ProgressVelocitySampleCount int `json:"progress_velocity_sample_count,omitempty"` /* number of samples taken */
 	TimeStarted int64 `json:"time_started,omitempty"` /* unix timestamp in seconds of start time, if/a */
 	Size int64 `json:"size"` /* size of file, -1 if unknown */
 
@@ -596,6 +598,11 @@ func (dl *Downloads) monitorDownloadProgress(done chan int64, path string, found
 					size_added := size - lastSize
 					time_elapsed := currentTimestamp - lastTimestamp
 					foundItem.ProgressVelocity = 1000.0 * float64(size_added) / float64(time_elapsed)
+					foundItem.AvgProgressVelocity = (foundItem.AvgProgressVelocity * float64(foundItem.ProgressVelocitySampleCount) + foundItem.ProgressVelocity) / float64(foundItem.ProgressVelocitySampleCount + 1)
+					foundItem.ProgressVelocitySampleCount++
+				} else {
+					foundItem.ProgressVelocitySampleCount = 0
+					foundItem.AvgProgressVelocity = 0
 				}
 
 				lastSize = size
@@ -641,7 +648,7 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 	}
 
 	/* When done, stop monitoring */
-	fmt.Printf("Done with download (%ld bytes transferred)\n", n)
+	fmt.Printf("Done with download (%d bytes transferred)\n", n)
 	done <- n
 
 	/* Update bool flags */
@@ -698,39 +705,94 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 	}
 
 	/* Pop next item off queue if it exists */
-	var q map[string]interface{}
-	select {
-		case tmp, ok := <-dl.queue:
-			if !ok {
-				fmt.Println("Channel closed!")
+	counter := 0
+	for {
+		var q map[string]interface{}
+		select {
+			case tmp, ok := <-dl.queue:
+				if !ok {
+					fmt.Println("Channel closed!")
+					return
+				} else {
+					q = tmp.(map[string]interface{})
+				}
+			default:
 				return
-			} else {
-				q = tmp.(map[string]interface{})
-			}
-		default:
+		}
+		outp, err := oAuth.Query(configuration.DownloadUriOauth, q["payload"].(map[string]interface{}))
+		if err != nil {
+			fmt.Println(err)
 			return
-	}
-	outp, err := oAuth.Query(configuration.DownloadUriOauth, q["payload"].(map[string]interface{}))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+		}
 
-	/* If not enough space, push item to back of queue */
-	if result, ok := outp["result"].(string); ok &&
-	(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
-		dl.queue <- q
-		fmt.Println("Not enough space --> pushing item to back of queue")
-		return
-	}
+		/* If not enough space, push item to back of queue */
+		if result, ok := outp["result"].(string); ok &&
+		(strings.Contains(result, "not_enough_space") || strings.Contains(result, "queue_full")) {
+			dl.queue <- q
+			fmt.Println("Not enough space --> pushing item to back of queue")
+			counter++
+			if counter > 3 {
+				counter = 0
 
-	/* Otherwise, go ahead and process item */
-	dl.RegisterOAuthDownloadStart(
-		q["imdb_id"].(string),
-		fmt.Sprintf("%.0f", outp[configuration.CloudItemIdKey].(float64)),
-		outp[configuration.CloudHashIdKey].(string),
-		outp["title"].(string),
-	)
+				/* Retrieve main folder */
+				res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+
+				/* Get all ID's from main folder. */
+				var list []interface{}
+				list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
+				if !ok {
+					fmt.Println("Could not retrieve ID's from downloading path")
+					return
+				}
+				list = append(list, list_tmp...)
+				list_tmp, ok = res["folders"].([]interface{})
+				if !ok {
+					fmt.Println("Could not retrieve ID's from folders path")
+					return
+				}
+				list = append(list, list_tmp...)
+
+				/* Clear out main folder */
+				fmt.Println("folders:", list)
+				for _, item := range list {
+					conv_item, ok := item.(map[string]interface{})
+					if !ok {
+						fmt.Println("Could not convert folder item")
+						return
+					}
+					current_id, ok := conv_item["id"].(float64)
+
+					delete_type := "folder"
+					if _, ok = conv_item["progress_url"].(string); ok {
+						delete_type = strings.TrimSuffix(configuration.OauthDownloadingPath, "s")
+					}
+
+					_, err := oAuth.Query("delete", map[string]interface{}{
+						"delete_arr": "[{\"type\": \"" + delete_type + "\", \"id\": \"" + fmt.Sprintf("%.0f", current_id) + "\"}]",
+					})
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+				}
+			}
+			time.Sleep(1000 * time.Millisecond)
+			continue
+		}
+
+		/* Otherwise, go ahead and process item */
+		dl.RegisterOAuthDownloadStart(
+			q["imdb_id"].(string),
+			fmt.Sprintf("%.0f", outp[configuration.CloudItemIdKey].(float64)),
+			outp[configuration.CloudHashIdKey].(string),
+			outp["title"].(string),
+		)
+		break
+	}
 }
 
 func (dl *Downloads) StartBackgroundDownload(url, cloud_id, filename string) (error) {
