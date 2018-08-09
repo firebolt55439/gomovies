@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"encoding/json"
 	"time"
+	"sync"
 
 	"github.com/42minutes/go-trakt"
 
@@ -72,8 +73,9 @@ func main() {
 	)
 
 	/* Initialize downloads */
-	downloadPool.ReadFromDisk()
 	downloadPool.queue = make(chan interface{}, 100)
+	downloadPool.lock = &sync.Mutex{}
+	downloadPool.ReadFromDisk()
 
 	/* Initialize microservices */
 	logger = log.NewLogfmtLogger(os.Stderr)

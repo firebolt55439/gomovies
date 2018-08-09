@@ -16,6 +16,7 @@ import (
 	"errors"
 	"net/http"
 	"bytes"
+	"sync"
 )
 
 const (
@@ -57,6 +58,7 @@ type DownloadItem struct {
 }
 
 type Downloads struct {
+	lock *sync.Mutex
 	pool []*DownloadItem
 	collections map[string]int
 	queue chan interface{}
@@ -96,6 +98,8 @@ func (dl *Downloads) GetCollections() ([]interface{}) {
 
 func (dl *Downloads) ReadiCloudStatus() (map[string]bool, map[string]int, error) {
 	/* Dump minified cloud database to temporary file */
+	dl.lock.Lock()
+	defer dl.lock.Unlock()
 	cmd := exec.Command("brctl", "dump", "-i", "-o", "./" + configuration.TemporaryCloudDbFile)
 	err := cmd.Run()
 	if err != nil {
@@ -255,10 +259,12 @@ func (dl *Downloads) RefreshDiskDownloads() {
 	})
 
 	/* Update pool */
+	dl.lock.Lock()
 	dl.pool = Filter(dl.pool, func(v *DownloadItem) bool {
 		return v.Source != "disk"
 	})
 	dl.pool = append(dl.pool, toAdd...)
+	dl.lock.Unlock()
 
 	/* Update collections */
 	dl.collections = collectionSet
@@ -278,6 +284,8 @@ func (dl *Downloads) ReadFromDisk() {
 	json.Unmarshal(content, &savedArr)
 
 	/* Restore OAuth items */
+	dl.lock.Lock()
+	defer dl.lock.Unlock()
 	for _, on := range savedArr {
 		if on.Source != "oauth" {
 			continue
@@ -349,6 +357,8 @@ func (dl *Downloads) RetrieveDownloads() ([]DownloadItem) {
 }
 
 func (dl *Downloads) AssociateDownloadWithImdb(download_id string, imdb_id string) (bool) {
+	dl.lock.Lock()
+	defer dl.lock.Unlock()
 	for _, on := range dl.pool {
 		if on.CloudID == download_id {
 			on.ImdbID = imdb_id
@@ -358,6 +368,34 @@ func (dl *Downloads) AssociateDownloadWithImdb(download_id string, imdb_id strin
 		}
 	}
 	return false
+}
+
+func (dl *Downloads) ReloadDownloadStates() {
+	/* Retrieve main folder */
+	res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	/* Get all folders in main folder. */
+	var list []interface{}
+	list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
+	if !ok {
+		fmt.Println("Could not retrieve ID's from downloading path")
+		return
+	}
+	list = append(list, list_tmp...)
+	list_tmp, ok = res["folders"].([]interface{})
+	if !ok {
+		fmt.Println("Could not retrieve ID's from folders path")
+		return
+	}
+	list = append(list, list_tmp...)
+
+	/* Refresh current download states */
+	dl.RefreshDownloadStates(list)
+	dl.RefreshDiskDownloads()
 }
 
 func (dl *Downloads) monitorOAuthDownload(cloud_id string, name string) (error) {
@@ -394,6 +432,9 @@ func (dl *Downloads) monitorOAuthDownload(cloud_id string, name string) (error) 
 					downloadDone = true
 					fmt.Println("Cloud is done downloading!")
 
+					/* Reload download states */
+					dl.ReloadDownloadStates()
+
 					/* Retrieve folder listing */
 					res, err := oAuth.ApiCall("folder/" + id, "GET", nil)
 					if err != nil {
@@ -423,18 +464,18 @@ func (dl *Downloads) monitorOAuthDownload(cloud_id string, name string) (error) 
 							largestSize = size
 						}
 					}
-					// b_2, _ := json.MarshalIndent(largestItem, "", "	")
-					// fmt.Println(string(b_2))
+					b_2, _ := json.MarshalIndent(largestItem, "", "	")
+					fmt.Println(string(b_2))
 
 					/* Retrieve file download URL */
 					outp, err := oAuth.Query("fetch_file", map[string]interface{}{
 						"folder_file_id": fmt.Sprintf("%.0f", largestItem["folder_file_id"].(float64)),
 					})
-					// b, _ := json.MarshalIndent(outp, "", "	")
-					// fmt.Println(string(b))
+					b, _ := json.MarshalIndent(outp, "", "	")
+					fmt.Println(string(b))
 
 					/* Start background download */
-					err = dl.StartBackgroundDownload(outp["url"].(string), cloud_id, outp["name"].(string))
+					err = dl.StartBackgroundDownload(outp["url"].(string), id, outp["name"].(string))
 					if err != nil {
 						fmt.Println(err)
 						return err
@@ -457,6 +498,7 @@ func (dl *Downloads) monitorOAuthDownload(cloud_id string, name string) (error) 
 func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string, hash_id string, name string) (error) {
 	/* Prepend download to beginning of pool so it appears first */
 	var err error = nil
+	dl.lock.Lock()
 	dl.pool = append([]*DownloadItem{&DownloadItem{
 		ImdbID: imdb_id,
 		Source: "oauth",
@@ -472,6 +514,7 @@ func (dl *Downloads) RegisterOAuthDownloadStart(imdb_id string, cloud_id string,
 		HasUploadedClient: false,
 		IsLocalToClient: false,
 	}}, dl.pool...)
+	dl.lock.Unlock()
 	dl.SaveToDisk()
 
 	/* Monitor download progress in background */
@@ -497,6 +540,8 @@ func contains(s []string, e string) bool {
 }
 
 func (dl *Downloads) RefreshDownloadStates(states []interface{}) (error) {
+	dl.lock.Lock()
+	defer dl.lock.Unlock()
 	var err error = nil
 	var updatedIds []string
 	for _, on_m := range states {
@@ -664,6 +709,7 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 		return
 	}
 	new_cloud_id := "icloud_" + final_path
+	dl.lock.Lock()
 	dl.pool = append([]*DownloadItem{&DownloadItem{
 		Source: "disk",
 		Name: filename,
@@ -679,6 +725,7 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 		HasUploadedClient: false,
 		IsLocalToClient: true,
 	}}, dl.pool...)
+	dl.lock.Unlock()
 	dl.SaveToDisk()
 
 	/* Delete from cloud */
@@ -704,31 +751,8 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 		fmt.Println(err)
 	}
 
-	/* Retrieve main folder */
-	res, err := oAuth.ApiCall("folder", "GET", map[string]interface{}{})
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	/* Get all folders in main folder. */
-	var list []interface{}
-	list_tmp, ok := res[configuration.OauthDownloadingPath].([]interface{})
-	if !ok {
-		fmt.Println("Could not retrieve ID's from downloading path")
-		return
-	}
-	list = append(list, list_tmp...)
-	list_tmp, ok = res["folders"].([]interface{})
-	if !ok {
-		fmt.Println("Could not retrieve ID's from folders path")
-		return
-	}
-	list = append(list, list_tmp...)
-
-	/* Refresh current download states */
-	downloadPool.RefreshDownloadStates(list)
-	downloadPool.RefreshDiskDownloads()
+	/* Reload download states */
+	dl.ReloadDownloadStates()
 
 	/* Pop next item off queue if it exists */
 	counter := 0
@@ -757,7 +781,13 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 			dl.queue <- q
 			fmt.Println("Not enough space --> pushing item to back of queue")
 			counter++
-			if counter > 3 {
+			numOAuth := 0
+			for _, tmp := range dl.pool {
+				if tmp.Source == "oauth" {
+					numOAuth++
+				}
+			}
+			if counter > 5 && numOAuth == 0 {
 				counter = 0
 
 				/* Retrieve main folder */
@@ -805,6 +835,8 @@ func (dl *Downloads) downloadHelper(url string, filename string, foundItem *Down
 						return
 					}
 				}
+			} else if counter > 10 && numOAuth > 0 {
+				break
 			}
 			time.Sleep(1000 * time.Millisecond)
 			continue
@@ -887,8 +919,10 @@ func (dl *Downloads) EvictLocalItem(cloud_id string) (error) {
 	}
 
 	/* Execute eviction and return if any error */
+	dl.lock.Lock()
 	cmd := exec.Command("brctl", "evict", foundItem.LocalPath)
 	err := cmd.Run()
+	dl.lock.Unlock()
 	return err
 }
 
@@ -937,12 +971,15 @@ func (dl *Downloads) AddToCollection(cloud_id string, collection_id string) (err
 	}
 
 	/* Append filler entry for new path to ensure IMDb ID association is not lost */
+	dl.lock.Lock()
 	dl.pool = append(dl.pool, &DownloadItem{
 		Source: "disk",
 		CloudID: "icloud_" + final_path_fake,
 		ImdbID: foundItem.ImdbID,
 		LocalPath: final_path,
 	})
+	dl.lock.Unlock()
+	dl.ReloadDownloadStates()
 	return nil
 }
 
@@ -970,11 +1007,13 @@ func (dl *Downloads) GetiCloudStreamUrl(cloud_id string) (string, error) {
 		return "", errors.New("No path found in item")
 	}
 
-	/* Execute eviction and return if any error */
+	/* Execute Swift program and return if any error */
+	dl.lock.Lock()
 	var out bytes.Buffer
 	cmd := exec.Command("swift", "stream_link.swift", foundItem.LocalPath)
 	cmd.Stdout = &out
 	err := cmd.Run()
+	dl.lock.Unlock()
 	return out.String(), err
 }
 
@@ -1033,12 +1072,15 @@ func (dl *Downloads) IntelligentRenameItem(cloud_id, title string) (string, erro
 	}
 
 	/* Append filler entry for new path to ensure IMDb ID association is not lost */
+	dl.lock.Lock()
 	dl.pool = append(dl.pool, &DownloadItem{
 		Source: "disk",
 		CloudID: "icloud_" + final_path,
 		ImdbID: foundItem.ImdbID,
 		LocalPath: final_path,
 	})
+	dl.lock.Unlock()
+	dl.ReloadDownloadStates()
 	return new_name, err
 }
 

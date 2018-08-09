@@ -436,12 +436,19 @@ $(function () {
 	};
 
 	// Function to generate markup for movie poster item in grid.
-	var retrieveCoverMarkup = function(on) {
+	var retrieveCoverMarkup = function(on, opts) {
+		opts = opts || {};
 		var li = $('<li class="grid-item"></li>');
+		var watch_icloud_hash = '#watch_imdb_download?' + $.param({
+			"id": on.imdb_code
+		});
 		var new_hash = '#watch?' + $.param({
 			"title": on.title,
 			"id": on.imdb_code
 		});
+		if(opts.watch_download){
+			new_hash = watch_icloud_hash;
+		}
 		var watched_hash = "#watched_recommendation?" + $.param({
 			"id": on.imdb_code
 		});
@@ -481,6 +488,7 @@ $(function () {
 		anc.append($('<span class="grid-button-bottom-left"><a href="' + watched_hash + '" class="btn btn-success"><span class="glyphicon glyphicon-check"></span></a></span>'));
 		if(isMovieInDownloads(on.imdb_code)) {
 			anc.append($('<a class="top-left-corner-badge btn btn-info"><span class="glyphicon glyphicon-floppy-saved"></span></a>'));
+			anc.append($('<span class="grid-button-right"><a href="' + watch_icloud_hash + '" class="btn btn-primary"><span class="glyphicon glyphicon-play"></span></a></span>'));
 		}
 		anc.append($('<span class="top-left-corner"><a href="' + associate_hash + '" class="btn btn-info"><span class="glyphicon glyphicon-random"></span></a></span>'));
 		li.append(anc);
@@ -548,6 +556,7 @@ $(function () {
 	// Populate grid with top movies by default, or requested movies if search term exists.
 	var onHomepage = false, autoPopulationCounter = 0;
 	var customRefreshTitle, customRefreshMessage, customRefreshTimer = 2000;
+	const FLAG_WATCH_DOWNLOAD_ON_CLICK = -(2 << 8);
 	var populateGrid = (callback, limit, doneRefreshingDownloads) => {
 		if(!doneRefreshingDownloads){
 			refreshAssocDownloads().then(() => {
@@ -558,6 +567,10 @@ $(function () {
 		onHomepage = (callback === getRecommendedMovies); // for auto-population
 		autoPopulationCounter = 0; // reset auto-population counter
 		$('.loader').show();
+		var cover_opts = {};
+		if(limit == FLAG_WATCH_DOWNLOAD_ON_CLICK){
+			cover_opts.watch_download = true;
+		}
 		callback(limit).then((data) => {
 			console.log(data);
 			data = data.filter((x) => !x.unreleased);
@@ -640,7 +653,7 @@ $(function () {
 				$('#highlights').css('opacity', '0');
 			}
 			for(var on of data){
-				var li = retrieveCoverMarkup(on);
+				var li = retrieveCoverMarkup(on, cover_opts);
 				$('#grid').append(li);
 			}
 			resizeWhenLoaded();
@@ -906,6 +919,21 @@ $(function () {
 						})
 					});
 				}, /*limit=*/12 * 1);
+			}, 150);
+		} else if(hash === "view_downloads_grid"){
+			$('#downloads').hide();
+			$('.quota-bars').hide();
+			setTimeout(() => {
+				populateGrid((limit) => {
+					return new Promise((resolve, reject) => {
+						getAssociatedDownloads().then((data) => {
+							data = data.downloads;
+							resolveParallel(data).then((resolved) => {
+								resolve(resolved.resolved);
+							});
+						});
+					});
+				}, FLAG_WATCH_DOWNLOAD_ON_CLICK);
 			}, 150);
 		} else if(hash === "view_downloads"){
 			onHomepage = false;
@@ -1301,6 +1329,34 @@ $(function () {
 				$('#downloads').show();
 				$('.quota-bars').show();
 			});
+		} else if(hash === "watch_imdb_download"){
+			$('.loader').show();
+			getDownloads().then((downloads) => {
+				downloads = downloads.downloads.filter((x) => x.resolved && x.resolved.imdb_code === params.id);
+				$('.loader').hide();
+				if(!downloads.length){
+					return swal({
+						title: "Could not find download",
+						icon: "error",
+						text: "Unable to find matching download"
+					});
+				}
+				var item = downloads[0];
+				if(!item.hasUploadedClient){
+					return swal({
+						title: "Item not in iCloud",
+						icon: "error",
+						text: "Requested item has not been uploaded to iCloud yet"
+					});
+				}
+				console.log(item);
+				var watch_hash = '#watch_icloud?' + $.param({
+					"icloud_id": item.id,
+					"imdb_id": params.id
+				});
+				window.history.pushState(null, null, watch_hash);
+				$(window).trigger('hashchange');
+			});
 		} else if(hash === "watch_download"){
 			var folder_id = params.folder_id;
 			resolveItem(params.imdb_id).then((on) => {
@@ -1324,6 +1380,13 @@ $(function () {
 				iCloudStreamUrl(cloud_id).then((file_data) => {
 					$('.loader').hide();
 					console.log("fetch:", file_data);
+					if(!file_data.result){
+						return swal({
+							title: "Could not stream item",
+							text: file_data.err,
+							icon: "error"
+						});
+					}
 					var url = file_data.url;
 					lastDownloadedItem = {
 						url: url,

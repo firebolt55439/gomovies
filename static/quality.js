@@ -128,6 +128,11 @@ function renderOptions(event, item){
     		return;
     	}
     	if(isCollections){
+    		collections.sort((a, b) => {
+    			if(a.name < b.name) return -1;
+    			if(a.name > b.name) return 1;
+    			return 0;
+    		});
     		collections.push({
     			name: "",
     			count: null
