@@ -377,6 +377,7 @@ function getCollections() {
 }
 
 // Run on page load.
+let downloadInterval = null;
 let player_windows = [];
 let win_id = 0;
 let child, currentItem, lastDownloadedItem, history, assocDownloads
@@ -962,11 +963,12 @@ $(function () {
 			$('#carousel_space').empty();
 			$('#grid').empty();
 			$('.loader').show();
-			var downloadInterval = null, populateDownloads = null;
+			var populateDownloads = null;
 			var populateDownloadsHelper = function() {
 				getDownloads().then((downloads) => {
 					var airplay_info = downloads.airplay_info;
 					if(!downloads.downloads || !downloads.downloads.length){
+						// console.log("Released download interval");
 						clearInterval(downloadInterval);
 						downloadInterval = null;
 						return;
@@ -974,6 +976,7 @@ $(function () {
 					var shouldRunAgain = populateDownloads(downloads.downloads, airplay_info);
 					// console.log(shouldRunAgain);
 					if(!shouldRunAgain || !$('#downloads').is(':visible')){
+						// console.log("Released download interval");
 						clearInterval(downloadInterval);
 						downloadInterval = null;
 					}
@@ -1344,7 +1347,8 @@ $(function () {
 			};
 			getDownloads().then((downloads) => {
 				var shouldRunAgain = populateDownloads(downloads.downloads, downloads.airplay_info);
-				if(shouldRunAgain){
+				if(shouldRunAgain && downloadInterval === null){
+					// console.log("Set download interval", downloadInterval);
 					downloadInterval = setInterval(populateDownloadsHelper, 4000);
 				}
 				$('.loader').hide();
