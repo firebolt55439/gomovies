@@ -1175,7 +1175,8 @@ $(function () {
 						}
 						tr.append($(`<td>${buttons.join("<br /><br />")}</td>`));
 						tr.find(".btn-evict-local").click(function(folder_id) {
-							return function() {
+							return function(e) {
+								e.preventDefault();
 								$('.loader').show();
 								evictLocalItem(folder_id).then((data) => {
 									$('.loader').hide();
@@ -1201,7 +1202,8 @@ $(function () {
 							};
 						}(item.id));
 						tr.find(".btn-rename-local").click(function(item) {
-							return function() {
+							return function(e) {
+								e.preventDefault();
 								$('.loader').show();
 								intelligentRenameItem({
 									id: item.id,
@@ -1230,7 +1232,7 @@ $(function () {
 							};
 						}(item))
 						tr.find(".btn-dl-background").click(function(folder_id) {
-							return function() {
+							return function(e) {
 								$('.loader').show();
 								retrieveFileUrl(folder_id, /*should_download=*/true).then((file_data) => {
 									$('.loader').hide();

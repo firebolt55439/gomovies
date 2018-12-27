@@ -8,3 +8,6 @@ TODO.txt
 downloads.json
 tmp_cloud_db
 *.bak
+*.sublime-project
+*.sublime-workspace
+config.proxy.json
